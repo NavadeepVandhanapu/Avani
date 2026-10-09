@@ -1,5 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, Image as ImageIcon, AlertCircle, Info, RefreshCw, Sparkles, CheckCircle2 } from 'lucide-react';
+import { 
+  Camera, 
+  Upload, 
+  AlertCircle, 
+  RefreshCw, 
+  CheckCircle2, 
+  SwitchCamera, 
+  VideoOff, 
+  Check, 
+  Layers
+} from 'lucide-react';
 import type { Language } from '../types';
 import { TRANSLATIONS } from '../translations';
 
@@ -8,6 +18,66 @@ interface LeafScannerProps {
   onAnalyze: (fileOrBlob: File | Blob, previewUrl: string) => void;
   onCancel: () => void;
 }
+
+interface BenchmarkSample {
+  id: string;
+  name: { en: string; te: string; hi: string };
+  crop: { en: string; te: string; hi: string };
+  imgUrl: string;
+  isHealthy: boolean;
+  tag: string;
+}
+
+const REAL_DATASET_SAMPLES: BenchmarkSample[] = [
+  {
+    id: 'tomato_early',
+    name: { en: 'Early Blight', te: 'ముందస్తు తెగులు', hi: 'अगेती झुलसा' },
+    crop: { en: 'Tomato', te: 'టమోటా', hi: 'टमाटर' },
+    imgUrl: '/samples/tomato_early_blight.jpg',
+    isHealthy: false,
+    tag: '🍅 Tomato'
+  },
+  {
+    id: 'tomato_healthy',
+    name: { en: 'Healthy Leaf', te: 'ఆరోగ్యకరమైన ఆకు', hi: 'स्वस्थ पत्ती' },
+    crop: { en: 'Tomato', te: 'టమోటా', hi: 'टमाटर' },
+    imgUrl: '/samples/tomato_healthy.jpg',
+    isHealthy: true,
+    tag: '🌿 Tomato'
+  },
+  {
+    id: 'potato_late',
+    name: { en: 'Late Blight', te: 'లేట్ బ్లైట్', hi: 'पछेती झुलसा' },
+    crop: { en: 'Potato', te: 'బంగాళాదుంప', hi: 'आलू' },
+    imgUrl: '/samples/potato_late_blight.jpg',
+    isHealthy: false,
+    tag: '🥔 Potato'
+  },
+  {
+    id: 'corn_rust',
+    name: { en: 'Common Rust', te: 'తుప్పు తెగులు', hi: 'रतुआ' },
+    crop: { en: 'Corn (Maize)', te: 'మొక్కజొన్న', hi: 'मक्का' },
+    imgUrl: '/samples/corn_common_rust.jpg',
+    isHealthy: false,
+    tag: '🌽 Corn'
+  },
+  {
+    id: 'pepper_bacterial',
+    name: { en: 'Bacterial Spot', te: 'బాక్టీరియల్ మచ్చలు', hi: 'जीवाणु धब्बा' },
+    crop: { en: 'Chili / Pepper', te: 'మిరప', hi: 'मिर्च' },
+    imgUrl: '/samples/pepper_bacterial_spot.jpg',
+    isHealthy: false,
+    tag: '🌶️ Pepper'
+  },
+  {
+    id: 'apple_scab',
+    name: { en: 'Apple Scab', te: 'యాపిల్ స్కాబ్', hi: 'सेब स्कैब' },
+    crop: { en: 'Apple', te: 'యాపిల్', hi: 'सेब' },
+    imgUrl: '/samples/apple_scab.jpg',
+    isHealthy: false,
+    tag: '🍏 Apple'
+  }
+];
 
 export const LeafScanner: React.FC<LeafScannerProps> = ({
   currentLang,
@@ -18,9 +88,12 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
 
   const [selectedFile, setSelectedFile] = useState<File | Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [isLoadingSample, setIsLoadingSample] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -35,6 +108,7 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setSelectedSampleId(null);
     validateAndSetImage(file);
   };
 
@@ -57,23 +131,37 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
     stopCamera();
   };
 
-  const startCamera = async () => {
+  const startCamera = async (overrideFacing?: 'environment' | 'user') => {
     setCameraError(null);
     setValidationError(null);
+    stopCamera();
+
+    const targetFacing = overrideFacing || facingMode;
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+        video: { 
+          facingMode: { ideal: targetFacing }, 
+          width: { ideal: 1280 }, 
+          height: { ideal: 720 } 
+        }
       });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
       setIsCameraActive(true);
+      setFacingMode(targetFacing);
     } catch (err: any) {
       console.warn('Camera access denied or unavailable:', err);
-      setCameraError('Camera access was not granted or is unavailable on this device. Please select a photo from your files.');
+      setCameraError('Camera access was not granted or is unavailable on this device. Please select a photo from your files or use the real dataset test samples below.');
       setIsCameraActive(false);
     }
+  };
+
+  const switchCamera = () => {
+    const nextFacing = facingMode === 'environment' ? 'user' : 'environment';
+    startCamera(nextFacing);
   };
 
   const stopCamera = () => {
@@ -94,6 +182,7 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
       ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
       canvas.toBlob((blob) => {
         if (blob) {
+          setSelectedSampleId(null);
           validateAndSetImage(blob);
         }
       }, 'image/jpeg', 0.92);
@@ -102,6 +191,7 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
 
   const clearImage = () => {
     setSelectedFile(null);
+    setSelectedSampleId(null);
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
     }
@@ -120,99 +210,61 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
     onAnalyze(selectedFile, previewUrl);
   };
 
-  const loadSampleLeaf = (type: 'tomato_early' | 'tomato_healthy' | 'potato_late' | 'corn_rust' | 'non_leaf') => {
+  const loadRealDatasetSample = async (sample: BenchmarkSample) => {
+    setIsLoadingSample(true);
+    setValidationError(null);
+    setSelectedSampleId(sample.id);
+
+    try {
+      const response = await fetch(sample.imgUrl);
+      if (!response.ok) throw new Error('Failed to fetch benchmark image');
+      const blob = await response.blob();
+      validateAndSetImage(blob);
+    } catch (err) {
+      console.warn('Real image load fallback:', err);
+      // Fallback: load using canvas synthetic representation if needed
+      loadFallbackCanvas(sample.id);
+    } finally {
+      setIsLoadingSample(false);
+    }
+  };
+
+  const loadNonLeafSample = () => {
+    setSelectedSampleId('non_leaf');
     const canvas = document.createElement('canvas');
     canvas.width = 400;
     canvas.height = 400;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    if (type === 'non_leaf') {
-      ctx.fillStyle = '#2c3e50';
-      ctx.fillRect(0, 0, 400, 400);
-      ctx.fillStyle = '#bdc3c7';
-      ctx.fillRect(50, 150, 300, 100);
-      ctx.font = '20px sans-serif';
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText('Desk Surface / Keyboard', 80, 210);
-    } else {
-      ctx.fillStyle = '#F4EFE6';
-      ctx.fillRect(0, 0, 400, 400);
+    ctx.fillStyle = '#2c3e50';
+    ctx.fillRect(0, 0, 400, 400);
+    ctx.fillStyle = '#bdc3c7';
+    ctx.fillRect(50, 150, 300, 100);
+    ctx.font = 'bold 22px sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('Non-Plant Object (Desk / Laptop)', 20, 210);
 
-      ctx.save();
-      ctx.translate(200, 200);
-      
-      if (type === 'corn_rust') {
-        ctx.fillStyle = '#4e8c3b';
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 75, 175, Math.PI / 8, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#396d29';
-        ctx.lineWidth = 4;
-        ctx.stroke();
-
-        ctx.fillStyle = '#c0392b';
-        for (let i = -100; i < 100; i += 22) {
-          ctx.beginPath();
-          ctx.ellipse((i % 30) - 10, i, 8, 4, Math.PI / 4, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      } else {
-        ctx.fillStyle = type === 'tomato_healthy' ? '#2e7d32' : '#438945';
-        ctx.beginPath();
-        ctx.moveTo(0, -150);
-        ctx.bezierCurveTo(90, -100, 130, 60, 0, 140);
-        ctx.bezierCurveTo(-130, 60, -90, -100, 0, -150);
-        ctx.fill();
-        ctx.strokeStyle = '#2b632d';
-        ctx.lineWidth = 4;
-        ctx.stroke();
-
-        ctx.strokeStyle = '#55a158';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(0, -130);
-        ctx.lineTo(0, 120);
-        ctx.stroke();
-
-        if (type === 'tomato_early') {
-          ctx.fillStyle = '#d4ac0d';
-          ctx.beginPath();
-          ctx.arc(-25, 20, 35, 0, Math.PI * 2);
-          ctx.arc(30, -30, 28, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.fillStyle = '#4a2306';
-          ctx.beginPath();
-          ctx.arc(-25, 20, 22, 0, Math.PI * 2);
-          ctx.arc(30, -30, 18, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.strokeStyle = '#2b1403';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(-25, 20, 12, 0, Math.PI * 2);
-          ctx.arc(-25, 20, 6, 0, Math.PI * 2);
-          ctx.stroke();
-        } else if (type === 'potato_late') {
-          ctx.fillStyle = '#a08365';
-          ctx.beginPath();
-          ctx.arc(15, -40, 45, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.fillStyle = '#2f1f14';
-          ctx.beginPath();
-          ctx.arc(15, -40, 28, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.fillStyle = '#e8f5e9';
-          ctx.beginPath();
-          ctx.arc(42, -35, 12, 0, Math.PI * 2);
-          ctx.fill();
-        }
+    canvas.toBlob((blob) => {
+      if (blob) {
+        validateAndSetImage(blob);
       }
-      ctx.restore();
-    }
+    }, 'image/jpeg', 0.90);
+  };
+
+  const loadFallbackCanvas = (_type: string) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 400;
+    canvas.height = 400;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.fillStyle = '#F4EFE6';
+    ctx.fillRect(0, 0, 400, 400);
+    ctx.fillStyle = '#2e7d32';
+    ctx.beginPath();
+    ctx.ellipse(200, 200, 90, 150, 0, 0, Math.PI * 2);
+    ctx.fill();
 
     canvas.toBlob((blob) => {
       if (blob) {
@@ -236,7 +288,7 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
         </div>
         <button
           onClick={onCancel}
-          className="p-2 rounded-lg text-muted hover:bg-ivory transition-colors text-xs font-semibold"
+          className="px-3 py-1.5 rounded-lg text-muted hover:bg-ivory border border-transparent hover:border-warmborder transition-colors text-xs font-semibold cursor-pointer"
           title="Cancel"
         >
           Cancel
@@ -244,7 +296,7 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
       </div>
 
       {/* Main Scanner Box */}
-      <div className="bg-cream border border-warmborder rounded-card p-6 shadow-card">
+      <div className="bg-cream border border-warmborder rounded-card p-5 sm:p-7 shadow-card">
         
         {/* Error Notification */}
         {(validationError || cameraError) && (
@@ -256,32 +308,51 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
 
         {/* Live Camera View */}
         {isCameraActive && (
-          <div className="relative rounded-natural overflow-hidden bg-charcoal aspect-video sm:aspect-[4/3] flex items-center justify-center mb-4 border border-warmborder">
+          <div className="relative rounded-natural overflow-hidden bg-charcoal aspect-video sm:aspect-[4/3] flex items-center justify-center mb-5 border border-warmborder shadow-elevated">
             <video
               ref={videoRef}
               autoPlay
               playsInline
               className="w-full h-full object-cover"
             />
-            <div className="absolute inset-8 border-2 border-dashed border-cream/70 rounded-2xl pointer-events-none flex items-center justify-center">
-              <span className="bg-charcoal/70 text-cream px-3 py-1 rounded-full text-xs font-medium backdrop-blur-sm">
-                Position leaf inside frame
+            
+            {/* Camera Reticle & Alignment Guide */}
+            <div className="absolute inset-8 sm:inset-14 border-2 border-dashed border-cream/80 rounded-2xl pointer-events-none flex items-center justify-center">
+              <div className="w-8 h-8 border-t-2 border-l-2 border-ochre absolute top-2 left-2" />
+              <div className="w-8 h-8 border-t-2 border-r-2 border-ochre absolute top-2 right-2" />
+              <div className="w-8 h-8 border-b-2 border-l-2 border-ochre absolute bottom-2 left-2" />
+              <div className="w-8 h-8 border-b-2 border-r-2 border-ochre absolute bottom-2 right-2" />
+              <span className="bg-charcoal/80 text-cream px-3 py-1 rounded-full text-xs font-semibold backdrop-blur-sm shadow-subtle">
+                🌿 Align Crop Leaf Here
               </span>
             </div>
 
-            <div className="absolute bottom-4 inset-x-0 flex items-center justify-center space-x-4">
+            {/* Camera Floating Controls */}
+            <div className="absolute top-3 right-3 flex items-center space-x-2">
+              <button
+                onClick={switchCamera}
+                className="p-2.5 rounded-full bg-charcoal/80 text-cream hover:bg-charcoal text-xs backdrop-blur-sm shadow-subtle cursor-pointer transition-transform active:scale-95"
+                title="Switch Camera (Front/Back)"
+              >
+                <SwitchCamera className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="absolute bottom-4 inset-x-0 flex items-center justify-center space-x-3 px-4">
               <button
                 onClick={capturePhoto}
-                className="px-6 py-3 rounded-full bg-cream text-primary font-bold shadow-elevated hover:bg-ivory active:scale-95 flex items-center space-x-2 text-sm"
+                className="px-6 py-3.5 rounded-full bg-primary text-cream font-bold shadow-elevated hover:bg-primary-dark active:scale-95 flex items-center space-x-2 text-sm cursor-pointer"
+                id="camera-snap-btn"
               >
-                <Camera className="w-4 h-4 text-primary" />
+                <Camera className="w-5 h-5 text-cream" />
                 <span>Snap Leaf Photo</span>
               </button>
               <button
                 onClick={stopCamera}
-                className="px-4 py-3 rounded-full bg-charcoal/80 text-cream font-medium hover:bg-charcoal text-xs backdrop-blur-sm"
+                className="px-4 py-3.5 rounded-full bg-charcoal/80 text-cream font-medium hover:bg-charcoal text-xs backdrop-blur-sm cursor-pointer"
               >
-                Cancel Camera
+                <VideoOff className="w-4 h-4 inline mr-1" />
+                Close Camera
               </button>
             </div>
           </div>
@@ -289,7 +360,7 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
 
         {/* Image Preview View */}
         {!isCameraActive && previewUrl && (
-          <div className="relative rounded-natural overflow-hidden border border-warmborder bg-ivory aspect-video sm:aspect-[4/3] flex items-center justify-center mb-5">
+          <div className="relative rounded-natural overflow-hidden border border-warmborder bg-ivory aspect-video sm:aspect-[4/3] flex items-center justify-center mb-5 shadow-subtle">
             <img
               src={previewUrl}
               alt="Leaf Preview"
@@ -298,7 +369,7 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
             <div className="absolute top-3 right-3 flex items-center space-x-2">
               <button
                 onClick={clearImage}
-                className="px-3 py-1.5 rounded-lg bg-charcoal/80 text-cream hover:bg-charcoal text-xs font-medium backdrop-blur-sm shadow-subtle flex items-center space-x-1"
+                className="px-3 py-1.5 rounded-lg bg-charcoal/80 text-cream hover:bg-charcoal text-xs font-medium backdrop-blur-sm shadow-subtle flex items-center space-x-1 cursor-pointer"
                 title={t.change_photo}
               >
                 <RefreshCw className="w-3.5 h-3.5" />
@@ -310,45 +381,42 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
 
         {/* Upload Buttons & Drop Area */}
         {!isCameraActive && !previewUrl && (
-          <div 
-            onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-warmborder-dark/60 hover:border-primary/60 rounded-natural p-8 text-center cursor-pointer transition-colors bg-ivory/50 hover:bg-ivory mb-5"
-          >
-            <div className="w-14 h-14 rounded-2xl bg-secondary/15 text-primary mx-auto flex items-center justify-center mb-3">
-              <ImageIcon className="w-7 h-7 text-primary" />
-            </div>
-            <h3 className="text-base font-bold text-charcoal">
-              Click to select a leaf photograph
-            </h3>
-            <p className="text-xs text-muted mt-1 max-w-sm mx-auto">
-              PNG, JPG, or WebP files up to 15MB.
-            </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+            
+            {/* Option 1: Live Camera Button */}
+            <button
+              type="button"
+              onClick={() => startCamera()}
+              className="p-6 rounded-natural border-2 border-primary/40 hover:border-primary bg-primary/5 hover:bg-primary/10 text-center flex flex-col items-center justify-center transition-all cursor-pointer group shadow-subtle"
+              id="turn-on-camera-btn"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-primary text-cream flex items-center justify-center mb-3 group-hover:scale-105 transition-transform shadow-subtle">
+                <Camera className="w-7 h-7 text-cream" />
+              </div>
+              <h3 className="text-base font-bold text-primary">
+                📷 Turn ON Live Camera
+              </h3>
+              <p className="text-xs text-muted mt-1 max-w-xs">
+                Snap leaf photo directly in field with your device camera
+              </p>
+            </button>
 
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  startCamera();
-                }}
-                className="px-4 py-2.5 rounded-natural bg-secondary text-cream hover:bg-secondary-dark font-medium text-xs sm:text-sm flex items-center space-x-2 shadow-subtle"
-              >
-                <Camera className="w-4 h-4" />
-                <span>{t.take_photo_btn}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  fileInputRef.current?.click();
-                }}
-                className="px-4 py-2.5 rounded-natural bg-cream border border-warmborder text-charcoal hover:bg-ivory font-medium text-xs sm:text-sm flex items-center space-x-2 shadow-subtle"
-              >
-                <Upload className="w-4 h-4 text-muted" />
-                <span>{t.choose_photo_btn}</span>
-              </button>
+            {/* Option 2: Upload File / Gallery */}
+            <div 
+              onClick={() => fileInputRef.current?.click()}
+              className="p-6 rounded-natural border-2 border-dashed border-warmborder-dark/60 hover:border-secondary-dark bg-ivory/50 hover:bg-ivory text-center flex flex-col items-center justify-center transition-all cursor-pointer group"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-secondary/20 text-secondary-dark flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                <Upload className="w-7 h-7 text-secondary-dark" />
+              </div>
+              <h3 className="text-base font-bold text-charcoal">
+                📂 Upload Leaf Image
+              </h3>
+              <p className="text-xs text-muted mt-1 max-w-xs">
+                Select JPG, PNG, or WebP photo from device files
+              </p>
             </div>
+
           </div>
         )}
 
@@ -360,59 +428,85 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
           onChange={handleFileChange}
         />
 
-        {/* 1-Click Sample Leaf Testing Tray */}
+        {/* Real Leaf Dataset Gallery (PlantVillage Benchmark 87K) */}
         {!isCameraActive && (
-          <div className="pt-4 border-t border-warmborder/80">
-            <div className="flex items-center space-x-1.5 text-xs font-semibold text-charcoal mb-2.5">
-              <Sparkles className="w-3.5 h-3.5 text-ochre" />
-              <span>{t.sample_leaves_heading}</span>
+          <div className="pt-5 border-t border-warmborder">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-1.5">
+                <Layers className="w-4 h-4 text-primary" />
+                <span className="text-xs font-bold text-charcoal uppercase tracking-wider">
+                  Test with Real Leaf Dataset (PlantVillage Benchmark)
+                </span>
+              </div>
+              <span className="text-[10px] text-muted font-medium bg-ivory px-2 py-0.5 rounded-full border border-warmborder hidden sm:inline">
+                87K Verified Disease Dataset
+              </span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+              {REAL_DATASET_SAMPLES.map((s) => {
+                const isSelected = selectedSampleId === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => loadRealDatasetSample(s)}
+                    disabled={isLoadingSample}
+                    className={`relative p-2 rounded-xl border text-left transition-all flex flex-col items-center cursor-pointer group ${
+                      isSelected
+                        ? 'border-primary bg-primary/10 ring-2 ring-primary/40 shadow-subtle'
+                        : 'border-warmborder bg-ivory/50 hover:bg-white hover:border-primary/50'
+                    }`}
+                  >
+                    <div className="w-full aspect-square rounded-lg overflow-hidden mb-1.5 bg-warmborder/30 border border-warmborder flex items-center justify-center">
+                      <img 
+                        src={s.imgUrl} 
+                        alt={s.name.en} 
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                      />
+                    </div>
+                    <div className="w-full text-center">
+                      <p className="text-[11px] font-bold text-charcoal truncate">
+                        {s.name[currentLang]}
+                      </p>
+                      <p className="text-[10px] text-muted truncate">
+                        {s.crop[currentLang]}
+                      </p>
+                    </div>
+                    {isSelected && (
+                      <div className="absolute top-1 right-1 bg-primary text-cream rounded-full p-0.5 shadow-subtle">
+                        <Check className="w-2.5 h-2.5" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Non-leaf Safety Rejection Test */}
+            <div className="mt-2.5 flex items-center justify-end">
               <button
                 type="button"
-                onClick={() => loadSampleLeaf('tomato_early')}
-                className="p-2 rounded-lg border border-warmborder bg-ivory/60 hover:bg-ivory hover:border-primary/40 text-[11px] font-medium text-charcoal text-center transition-all"
+                onClick={loadNonLeafSample}
+                className={`px-3 py-1 rounded-lg border text-[11px] font-medium transition-all cursor-pointer flex items-center space-x-1 ${
+                  selectedSampleId === 'non_leaf'
+                    ? 'border-danger bg-danger-light text-danger font-bold'
+                    : 'border-warmborder bg-ivory/60 text-muted hover:text-danger hover:border-danger/40'
+                }`}
+                title="Test safety heuristic for non-leaf objects"
               >
-                🍅 {t.sample_tomato_early}
-              </button>
-              <button
-                type="button"
-                onClick={() => loadSampleLeaf('tomato_healthy')}
-                className="p-2 rounded-lg border border-warmborder bg-ivory/60 hover:bg-ivory hover:border-primary/40 text-[11px] font-medium text-charcoal text-center transition-all"
-              >
-                🌿 {t.sample_tomato_healthy}
-              </button>
-              <button
-                type="button"
-                onClick={() => loadSampleLeaf('potato_late')}
-                className="p-2 rounded-lg border border-warmborder bg-ivory/60 hover:bg-ivory hover:border-primary/40 text-[11px] font-medium text-charcoal text-center transition-all"
-              >
-                🥔 {t.sample_potato_late}
-              </button>
-              <button
-                type="button"
-                onClick={() => loadSampleLeaf('corn_rust')}
-                className="p-2 rounded-lg border border-warmborder bg-ivory/60 hover:bg-ivory hover:border-primary/40 text-[11px] font-medium text-charcoal text-center transition-all"
-              >
-                🌽 {t.sample_corn_rust}
-              </button>
-              <button
-                type="button"
-                onClick={() => loadSampleLeaf('non_leaf')}
-                className="p-2 rounded-lg border border-warmborder bg-ivory/60 hover:bg-ivory hover:border-danger/40 text-[11px] font-medium text-charcoal text-center transition-all"
-              >
-                🚫 {t.sample_non_leaf}
+                <span>🚫 Test Non-Leaf Rejection (Desk / Keyboard)</span>
               </button>
             </div>
           </div>
         )}
 
         {/* Primary Action Button */}
-        {previewUrl && (
+        {previewUrl && !isCameraActive && (
           <div className="mt-5">
             <button
               onClick={handleStartAnalysis}
-              className="w-full py-3.5 rounded-natural bg-primary hover:bg-primary-dark text-cream font-bold text-base shadow-elevated flex items-center justify-center space-x-2 transition-all active:scale-[0.99]"
+              className="w-full py-4 rounded-natural bg-primary hover:bg-primary-dark text-cream font-bold text-base shadow-elevated flex items-center justify-center space-x-2 transition-all active:scale-[0.99] cursor-pointer"
               id="check-leaf-action-btn"
             >
               <CheckCircle2 className="w-5 h-5 text-cream" />
@@ -421,20 +515,6 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
           </div>
         )}
 
-      </div>
-
-      {/* Photo-Taking Tips Card */}
-      <div className="mt-5 p-4 rounded-natural bg-ivory border border-warmborder text-xs text-charcoal space-y-2">
-        <div className="flex items-center space-x-1.5 font-bold text-primary">
-          <Info className="w-4 h-4 text-primary" />
-          <span>{t.tips_title}</span>
-        </div>
-        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-muted list-disc list-inside">
-          <li>{t.tip_1}</li>
-          <li>{t.tip_2}</li>
-          <li>{t.tip_3}</li>
-          <li>{t.tip_4}</li>
-        </ul>
       </div>
 
     </div>

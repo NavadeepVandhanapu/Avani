@@ -15,7 +15,6 @@ def init_db():
             created_at TEXT NOT NULL,
             crop_name TEXT NOT NULL,
             predicted_class TEXT NOT NULL,
-            
             disease_name TEXT NOT NULL,
             is_healthy INTEGER NOT NULL,
             confidence REAL NOT NULL,
@@ -25,11 +24,49 @@ def init_db():
             guidance_summary TEXT
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS feedback (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            scan_id TEXT,
+            predicted_class TEXT NOT NULL,
+            rating TEXT NOT NULL,
+            is_accurate INTEGER NOT NULL,
+            actual_condition TEXT,
+            notes TEXT
+        )
+    """)
     conn.commit()
     conn.close()
 
 # Auto-initialize on import
 init_db()
+
+def save_feedback(feedback_data: Dict[str, Any]) -> Dict[str, Any]:
+    init_db()
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    fb_id = feedback_data.get("id") or f"fb_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:19]}"
+    created_at = feedback_data.get("created_at") or datetime.now().isoformat()
+    cursor.execute("""
+        INSERT OR REPLACE INTO feedback
+        (id, created_at, scan_id, predicted_class, rating, is_accurate, actual_condition, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        fb_id,
+        created_at,
+        feedback_data.get("scan_id", ""),
+        feedback_data.get("predicted_class", ""),
+        feedback_data.get("rating", "accurate"),
+        1 if feedback_data.get("is_accurate", True) else 0,
+        feedback_data.get("actual_condition", ""),
+        feedback_data.get("notes", "")
+    ))
+    conn.commit()
+    conn.close()
+    feedback_data["id"] = fb_id
+    feedback_data["created_at"] = created_at
+    return feedback_data
 
 def save_scan(scan_data: Dict[str, Any]) -> Dict[str, Any]:
     init_db()

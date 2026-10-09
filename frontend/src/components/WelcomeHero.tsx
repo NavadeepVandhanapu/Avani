@@ -52,76 +52,21 @@ export const WelcomeHero: React.FC<WelcomeHeroProps> = ({
         </div>
 
         {/* Brand & Purpose */}
-        <div className="mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary mb-3">
-            {/* Clean, authentic botanical leaf icon */}
-            <svg 
-              viewBox="0 0 24 24" 
-              className="w-8 h-8 fill-none stroke-current" 
-              strokeWidth="2" 
-              strokeLinecap="round" 
-              strokeLinejoin="round"
-            >
-              <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" />
-              <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" />
-            </svg>
+        <div className="mb-6 flex flex-col items-center">
+          <div className="w-28 h-28 sm:w-36 sm:h-36 rounded-3xl bg-white p-3 border border-warmborder shadow-card flex items-center justify-center mb-4 hover:shadow-elevated transition-all">
+            <img 
+              src="/logo.png" 
+              alt="Avani - Know your crop well being" 
+              className="w-full h-full object-contain rounded-2xl" 
+            />
           </div>
 
-          <h2 className="text-2xl font-bold tracking-tight text-primary font-sans">
+          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-primary font-sans">
             {t.app_title}
           </h2>
-          <p className="text-xs sm:text-sm text-secondary-dark font-medium mt-0.5">
+          <p className="text-sm sm:text-base text-secondary-dark font-medium mt-1">
             “{t.tagline}”
           </p>
-        </div>
-
-        {/* Purposeful Agricultural Visual */}
-        <div className="my-5 max-w-xs mx-auto rounded-2xl overflow-hidden border border-warmborder bg-ivory/60 p-3 shadow-subtle flex items-center justify-center">
-          <svg
-            viewBox="0 0 320 160"
-            className="w-full h-auto text-primary"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            {/* Ground / Furrows */}
-            <path d="M10 145 C 90 135, 230 155, 310 145" stroke="#E6E5DA" strokeWidth="4" strokeLinecap="round" />
-            <path d="M30 152 C 120 145, 200 155, 290 152" stroke="#D5D3C5" strokeWidth="2.5" strokeLinecap="round" />
-
-            {/* Central Crop Plant */}
-            <path d="M160 140 Q 160 70 160 40" stroke="#285943" strokeWidth="4.5" strokeLinecap="round" />
-            
-            {/* Left Leaf */}
-            <path 
-              d="M160 100 C 130 90 100 80 80 95 C 95 115 130 120 160 110 Z" 
-              fill="#78966A" 
-              stroke="#285943" 
-              strokeWidth="2" 
-            />
-            <path d="M160 100 C 130 96 100 90 85 96" stroke="#285943" strokeWidth="1.5" />
-
-            {/* Right Leaf */}
-            <path 
-              d="M160 80 C 190 70 220 60 240 75 C 225 95 190 100 160 90 Z" 
-              fill="#78966A" 
-              stroke="#285943" 
-              strokeWidth="2" 
-            />
-            <path d="M160 80 C 190 76 220 70 235 76" stroke="#285943" strokeWidth="1.5" />
-
-            {/* Top Young Shoot */}
-            <path 
-              d="M160 40 C 145 25 150 10 160 12 C 170 10 175 25 160 40 Z" 
-              fill="#8FAE7F" 
-              stroke="#285943" 
-              strokeWidth="2" 
-            />
-            
-            {/* Gentle Sun Arc */}
-            <circle cx="270" cy="35" r="16" fill="#F8F7F0" stroke="#C6A15B" strokeWidth="3" />
-            <path d="M270 12 L270 5" stroke="#C6A15B" strokeWidth="2" strokeLinecap="round" />
-            <path d="M293 35 L300 35" stroke="#C6A15B" strokeWidth="2" strokeLinecap="round" />
-            <path d="M286 19 L292 13" stroke="#C6A15B" strokeWidth="2" strokeLinecap="round" />
-          </svg>
         </div>
 
         {/* Friendly Greeting & One-Sentence Description */}

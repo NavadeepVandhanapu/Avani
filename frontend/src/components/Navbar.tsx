@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sprout, History, CloudSun, Globe, Volume2, VolumeX } from 'lucide-react';
+import { History, CloudSun, Globe, Volume2, VolumeX, Bell } from 'lucide-react';
 import type { Language, WeatherData } from '../types';
 import { TRANSLATIONS } from '../translations';
 
@@ -8,8 +8,10 @@ interface NavbarProps {
   onLanguageChange: (lang: Language) => void;
   onOpenHistory: () => void;
   onOpenWeather: () => void;
+  onOpenNotifications: () => void;
   onGoHome: () => void;
   scanCount: number;
+  notificationCount?: number;
   weatherData?: WeatherData | null;
   isSpeaking: boolean;
   onToggleSpeech: () => void;
@@ -20,8 +22,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLanguageChange,
   onOpenHistory,
   onOpenWeather,
+  onOpenNotifications,
   onGoHome,
   scanCount,
+  notificationCount = 4,
   weatherData,
   isSpeaking,
   onToggleSpeech
@@ -38,8 +42,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           className="flex items-center space-x-3 text-left group focus:outline-none cursor-pointer"
           title="Avani"
         >
-          <div className="w-10 h-10 rounded-xl bg-primary text-cream flex items-center justify-center shadow-subtle group-hover:bg-primary-dark transition-colors">
-            <Sprout className="w-6 h-6 text-cream" />
+          <div className="w-11 h-11 rounded-xl bg-white p-1 border border-warmborder flex items-center justify-center shadow-subtle group-hover:border-primary transition-all">
+            <img src="/logo.png" alt="Avani Logo" className="w-full h-full object-contain rounded-lg" />
           </div>
           <div>
             <span className="text-xl font-bold tracking-tight text-primary font-sans block leading-tight">
@@ -65,6 +69,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>{weatherData.temperature}°C</span>
             </button>
           )}
+
+          {/* Real-time Notifications Bell */}
+          <button
+            onClick={onOpenNotifications}
+            className="relative p-2 rounded-lg border border-warmborder bg-ivory text-charcoal hover:bg-warmborder/30 transition-colors cursor-pointer"
+            title="Real-Time Agro & Disease Alerts"
+            aria-label="Real-time notifications"
+          >
+            <Bell className="w-4 h-4 text-ochre" />
+            {notificationCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-ochre text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow-subtle animate-bounce">
+                {notificationCount}
+              </span>
+            )}
+          </button>
 
           {/* Audio TTS Toggle */}
           <button
