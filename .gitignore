@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+backend/venv/
+backend/.venv/
+env/
+.env
+
+# Build outputs
+frontend/dist/
+frontend/.vite/
+
+# Python cache & test artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+backend/.pytest_cache/
+.pytest_cache/
+*.egg-info/
+
+# Local SQLite databases
+backend/avani.db
+
+# OS files
+.DS_Store
+Thumbs.db
+*.log
