@@ -79,7 +79,7 @@ The Vite development server runs on `http://localhost:5173`.
 
 ---
 
-## 🧪 Automated Testing
+## 🧪Automated Testing
 
 ### Backend Test Suite
 Run the automated pytest suite covering health checks, crop listing, leaf validation, non-leaf rejection, guidance generation, scan persistence, and weather endpoints:
