@@ -109,6 +109,10 @@ export const App: React.FC = () => {
     setCurrentStep('scanner');
   };
 
+  const handleStartCameraScan = () => {
+    handleStartScan();
+  };
+
   const handleScanSampleLeaf = async (sampleUrl: string) => {
     SpeechAssistant.stop();
     setIsSpeaking(false);
@@ -295,6 +299,7 @@ export const App: React.FC = () => {
             currentLang={currentLang}
             onLanguageChange={setCurrentLang}
             onStartScan={handleStartScan}
+            onStartCameraScan={handleStartCameraScan}
             onOpenHistory={() => setIsHistoryModalOpen(true)}
             onOpenWeather={() => setIsWeatherModalOpen(true)}
             onOpenVoiceAssistant={() => setIsVoiceModalOpen(true)}
@@ -335,6 +340,7 @@ export const App: React.FC = () => {
             previewUrl={currentPreviewUrl || ''}
             onProceedToQuestions={handleProceedToQuestions}
             onScanAnother={handleStartScan}
+            onScanWithCamera={handleStartCameraScan}
             onOpenVoiceAssistant={() => setIsVoiceModalOpen(true)}
           />
         )}
@@ -355,6 +361,7 @@ export const App: React.FC = () => {
             onSaveScan={handleSaveCurrentScan}
             isSaved={isSavedInHistory}
             onScanAnother={handleStartScan}
+            onScanWithCamera={handleStartCameraScan}
             weatherData={weatherData}
           />
         )}
@@ -370,14 +377,16 @@ export const App: React.FC = () => {
       />
 
       {/* Situational Climate & Scan Alert Toast (with Two-Way Voice and Geolocation prompt) */}
-      <SituationalAlertPopup
-        currentLang={currentLang}
-        weatherData={weatherData}
-        latestPrediction={prediction}
-        onRequestGeolocation={handleRequestGeolocation}
-        onOpenWeather={() => setIsWeatherModalOpen(true)}
-        onStartScan={handleStartScan}
-      />
+      {currentStep !== 'scanner' && (
+        <SituationalAlertPopup
+          currentLang={currentLang}
+          weatherData={weatherData}
+          latestPrediction={prediction}
+          onRequestGeolocation={handleRequestGeolocation}
+          onOpenWeather={() => setIsWeatherModalOpen(true)}
+          onStartScan={handleStartScan}
+        />
+      )}
 
       {/* Real-time Notifications Modal (Multilingual Alerts) */}
       {isNotificationsOpen && (

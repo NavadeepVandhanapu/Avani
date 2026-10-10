@@ -89,7 +89,6 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     wind: "Wind",
     disease_pressure: "Disease Pressure Risk",
     field_hygiene_advisory: "Foliage Hygiene Advisory",
-    
     // Voice Assistant
     voice_assistant_btn: "Voice Assistant",
     voice_modal_title: "Avani Two-Way Voice Assistant",
@@ -111,7 +110,18 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     active_scan_context: "Active crop context",
     voice_permission_denied: "Microphone permission was denied. Please allow microphone access in your browser settings.",
     voice_no_speech: "No speech heard. Please tap the microphone and speak near your device.",
-    voice_unsupported: "Speech recognition is not supported in this browser. You can type your question directly below."
+    voice_unsupported: "Speech recognition is not supported in this browser. You can type your question directly below.",
+
+    scan_real_camera: "Scan Real Leaf (Turn ON Camera)",
+    scan_real_camera_sub: "Point your camera at a real plant leaf in your field",
+    switch_to_camera: "Switch to Live Camera",
+    timeline_action_explanation: "Why this action matters & Field Guide",
+    timeline_phase_1: "Today • Immediate Field Inspection & Sanitation",
+    timeline_phase_2: "Days 2–3 • Active Monitoring & Moisture Control",
+    timeline_phase_3: "Day 5+ • Evaluation & KVK Escalation",
+    filter_all_tasks: "All Steps",
+    completed_badge: "Completed",
+    pending_badge: "Action Required"
   },
   te: {
     app_title: "అవని",
@@ -201,7 +211,6 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     wind: "గాలి వేగం",
     disease_pressure: "వ్యాధి తీవ్రత ముప్పు",
     field_hygiene_advisory: "క్షేత్ర పరిశుభ్రత సలహా",
-
     // Voice Assistant
     voice_assistant_btn: "వాయిస్ సహాయకుడు",
     voice_modal_title: "అవని వాయిస్ అసిస్టెంట్",
@@ -223,7 +232,18 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     active_scan_context: "ప్రస్తుత పంట సమాచారం",
     voice_permission_denied: "మైక్రోఫోన్ అనుమతి నిరాకరించబడింది. దయచేసి బ్రౌజర్ సెట్టింగ్స్‌లో మైక్ అనుమతించండి.",
     voice_no_speech: "మాట వినిపించలేదు. మైక్ నొక్కి పరికరం దగ్గర మాట్లాడండి.",
-    voice_unsupported: "ఈ బ్రౌజర్‌లో వాయిస్ రికగ్నిషన్ సపోర్ట్ లేదు. మీరు క్రింద టైప్ చేయవచ్చు."
+    voice_unsupported: "ఈ బ్రౌజర్‌లో వాయిస్ రికగ్నిషన్ సపోర్ట్ లేదు. మీరు క్రింద టైప్ చేయవచ్చు.",
+
+    scan_real_camera: "నిజమైన ఆకును స్కాన్ చేయండి (కెమెరా ఆన్ చేయండి)",
+    scan_real_camera_sub: "మీ పరికర కెమెరాతో పొలంలో ఆకును లైవ్‌గా పరీక్షించండి",
+    switch_to_camera: "లైవ్ కెమెరాకు మారండి",
+    timeline_action_explanation: "ఈ పని ఎందుకు ముఖ్యం & క్షేత్ర చిట్కా",
+    timeline_phase_1: "ఈరోజు • తక్షణ క్షేత్ర తనిఖీ & పరిశుభ్రత",
+    timeline_phase_2: "2-3 రోజులు • వ్యాప్తి పర్యవేక్షణ & తేమ నియంత్రణ",
+    timeline_phase_3: "5వ రోజు తర్వాత • పునఃపరిశీలన & KVK సంప్రదింపు",
+    filter_all_tasks: "అన్ని పనులు",
+    completed_badge: "పూర్తయింది",
+    pending_badge: "చేయవలసిన పని"
   },
   hi: {
     app_title: "अवनी",
@@ -313,7 +333,6 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     wind: "हवा की गति",
     disease_pressure: "रोग संक्रमण का खतरा",
     field_hygiene_advisory: "खेत स्वच्छता सलाह",
-
     // Voice Assistant
     voice_assistant_btn: "वॉयस असिस्टेंट",
     voice_modal_title: "अवनी वॉयस असिस्टेंट",
@@ -335,6 +354,17 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     active_scan_context: "वर्तमान फसल संदर्भ",
     voice_permission_denied: "माइक्रोफोन की अनुमति नहीं मिली। कृपया ब्राउज़र सेटिंग्स में माइक की अनुमति दें।",
     voice_no_speech: "आवाज़ सुनाई नहीं दी। माइक दबाकर डिवाइस के पास बोलें।",
-    voice_unsupported: "इस ब्राउज़र में वॉयस इनपुट उपलब्ध नहीं है। आप नीचे लिखकर सवाल पूछ सकते हैं।"
+    voice_unsupported: "इस ब्राउज़र में वॉयस इनपुट उपलब्ध नहीं है। आप नीचे लिखकर सवाल पूछ सकते हैं।",
+
+    scan_real_camera: "खेत की असली पत्ती स्कैन करें (कैमरा चालू करें)",
+    scan_real_camera_sub: "अपने डिवाइस कैमरे से खेत में असली पत्ती को तुरंत स्कैन करें",
+    switch_to_camera: "लाइव कैमरे पर जाएं",
+    timeline_action_explanation: "यह कदम क्यों आवश्यक है व व्यावहारिक सुझाव",
+    timeline_phase_1: "आज • तत्काल निरीक्षण व खेत स्वच्छता",
+    timeline_phase_2: "2-3 दिन • फैलाव निगरानी व नमी नियंत्रण",
+    timeline_phase_3: "5 दिन बाद • समीक्षा व कृषि विज्ञान केंद्र संपर्क",
+    filter_all_tasks: "सभी कदम",
+    completed_badge: "पूरा हुआ",
+    pending_badge: "आवश्यक कार्य"
   }
 };

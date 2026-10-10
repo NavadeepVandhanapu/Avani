@@ -99,11 +99,31 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  const setVideoRef = (el: HTMLVideoElement | null) => {
+    videoRef.current = el;
+    if (el && streamRef.current) {
+      if (el.srcObject !== streamRef.current) {
+        el.srcObject = streamRef.current;
+      }
+      el.play().catch(e => console.warn('Video play error on ref mount:', e));
+    }
+  };
+
   useEffect(() => {
+    // Camera is OFF by default unless user explicitly clicks Turn ON Camera
     return () => {
       stopCamera();
     };
   }, []);
+
+  useEffect(() => {
+    if (isCameraActive && videoRef.current && streamRef.current) {
+      if (videoRef.current.srcObject !== streamRef.current) {
+        videoRef.current.srcObject = streamRef.current;
+      }
+      videoRef.current.play().catch(e => console.warn('Video play error on state active:', e));
+    }
+  }, [isCameraActive]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -139,22 +159,33 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
     const targetFacing = overrideFacing || facingMode;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: { ideal: targetFacing }, 
-          width: { ideal: 1280 }, 
-          height: { ideal: 720 } 
-        }
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { 
+            facingMode: { ideal: targetFacing }, 
+            width: { ideal: 1280 }, 
+            height: { ideal: 720 } 
+          },
+          audio: false
+        });
+      } catch (firstErr) {
+        console.warn('Ideal camera constraint failed, falling back to simple video: true', firstErr);
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       }
+
+      streamRef.current = stream;
       setIsCameraActive(true);
       setFacingMode(targetFacing);
+
+      // Attach immediately if videoRef is already mounted
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(e => console.warn('Video play error:', e));
+      }
     } catch (err: any) {
       console.warn('Camera access denied or unavailable:', err);
-      setCameraError('Camera access was not granted or is unavailable on this device. Please select a photo from your files or use the real dataset test samples below.');
+      setCameraError('Camera access was not granted or is unavailable on this device. Please grant camera permission in your browser or select a photo from device.');
       setIsCameraActive(false);
     }
   };
@@ -168,6 +199,9 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
     setIsCameraActive(false);
   };
@@ -310,9 +344,10 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
         {isCameraActive && (
           <div className="relative rounded-natural overflow-hidden bg-charcoal aspect-video sm:aspect-[4/3] flex items-center justify-center mb-5 border border-warmborder shadow-elevated">
             <video
-              ref={videoRef}
+              ref={setVideoRef}
               autoPlay
               playsInline
+              muted
               className="w-full h-full object-cover"
             />
             
@@ -367,6 +402,15 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
               className="w-full h-full object-contain"
             />
             <div className="absolute top-3 right-3 flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={() => startCamera()}
+                className="px-3 py-1.5 rounded-lg bg-primary text-cream hover:bg-primary-dark text-xs font-bold backdrop-blur-sm shadow-subtle flex items-center space-x-1.5 cursor-pointer transition-all"
+                title="Turn ON Live Camera to scan a real plant"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>{t.switch_to_camera || "Switch to Live Camera"}</span>
+              </button>
               <button
                 onClick={clearImage}
                 className="px-3 py-1.5 rounded-lg bg-charcoal/80 text-cream hover:bg-charcoal text-xs font-medium backdrop-blur-sm shadow-subtle flex items-center space-x-1 cursor-pointer"
@@ -501,16 +545,26 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
           </div>
         )}
 
-        {/* Primary Action Button */}
+        {/* Primary Action Buttons */}
         {previewUrl && !isCameraActive && (
-          <div className="mt-5">
+          <div className="mt-5 flex flex-col sm:flex-row items-center gap-3">
             <button
               onClick={handleStartAnalysis}
-              className="w-full py-4 rounded-natural bg-primary hover:bg-primary-dark text-cream font-bold text-base shadow-elevated flex items-center justify-center space-x-2 transition-all active:scale-[0.99] cursor-pointer"
+              className="w-full sm:flex-1 py-4 rounded-natural bg-primary hover:bg-primary-dark text-cream font-bold text-base shadow-elevated flex items-center justify-center space-x-2 transition-all active:scale-[0.99] cursor-pointer"
               id="check-leaf-action-btn"
             >
               <CheckCircle2 className="w-5 h-5 text-cream" />
               <span>{t.check_leaf_action}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => startCamera()}
+              className="w-full sm:w-auto px-6 py-4 rounded-natural bg-secondary/15 hover:bg-secondary/25 border border-secondary/40 text-primary-dark font-bold text-sm shadow-subtle flex items-center justify-center space-x-2 transition-all cursor-pointer"
+              title="Turn on live camera to capture a real plant leaf in field"
+            >
+              <Camera className="w-4 h-4 text-secondary-dark" />
+              <span>{t.scan_real_camera || "Scan Real Leaf (Camera)"}</span>
             </button>
           </div>
         )}
