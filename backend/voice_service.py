@@ -32,21 +32,21 @@ def _detect_language(text: str, fallback: str = "en") -> str:
     telugu_count = sum(1 for ch in text if '\u0C00' <= ch <= '\u0C7F')
     hindi_count = sum(1 for ch in text if '\u0900' <= ch <= '\u097F')
 
-    if telugu_count >= 3:
+    if telugu_count >= 1:
         return "te"
-    if hindi_count >= 3:
+    if hindi_count >= 1:
         return "hi"
     return fallback
 
 
 CROP_KEYWORDS: Dict[str, List[str]] = {
-    "Tomato": ["tomato", "టమోటా", "టమాటా", "टमाटर"],
-    "Potato": ["potato", "బంగాళాదుంప", "ఆలూ", "ఆలు", "आलू"],
-    "Corn (Maize)": ["corn", "maize", "మొక్కజొన్న", "మక్క", "జొన్న", "मक्का", "भुट्टा"],
-    "Apple": ["apple", "యాపిల్", "ఆపిల్", "सेब"],
-    "Grape": ["grape", "ద్రాక్ష", "అంగూర్", "अंगूर"],
-    "Pepper (Capsicum)": ["chili", "pepper", "capsicum", "మిరప", "కాప్సికం", "మిర్చి", "मिर्च", "शिमला मिर्च"],
-    "Rice (Paddy)": ["rice", "paddy", "వరి", "వరిపంట", "వరిచేను", "ధాన్యం", "धान", "चावल"]
+    "Tomato": ["tomato", "టమోటా", "టమాటా", "टमाटर", "tamatar"],
+    "Potato": ["potato", "బంగాళాదుంప", "ఆలూ", "ఆలు", "आलू", "aloo", "alu"],
+    "Corn (Maize)": ["corn", "maize", "మొక్కజొన్న", "మక్క", "జొన్న", "मक्का", "भुट्टा", "makka", "bhutta"],
+    "Apple": ["apple", "యాపిల్", "ఆపిల్", "सेब", "seb"],
+    "Grape": ["grape", "ద్రాక్ష", "అంగూర్", "अंगूर", "angoor"],
+    "Pepper (Capsicum)": ["chili", "pepper", "capsicum", "మిరప", "కాప్సికం", "మిర్చి", "मिर्च", "शिमला मिर्च", "mirch", "shimla mirch"],
+    "Rice (Paddy)": ["rice", "paddy", "వరి", "వరిపంట", "వరిచేను", "ధాన్యం", "धान", "चावल", "dhan", "chawal"]
 }
 
 # Acknowledgement / "I know that" / Gratitude keywords
@@ -68,6 +68,7 @@ PREVENTION_PATTERNS = [
     "ఆపాలి", "ఆపడం", "తగ్గించాలి", "కాపాడాలి", "రక్షించాలి", "ఎలా అరికట్టాలి", "ఎలా నివారించాలి",
     # Hindi: "रोकथाम", "कैसे रोकें", "बचाव"
     "रोकथाम", "रोकें", "रोकना", "कैसे रोकें", "नियंत्रण", "बचाव", "बचाएं", "उपचार", "इलाज", "समाधान", "रोकने",
+    "roktham", "kaise roke", "bachav", "upchar", "ilaaj", "samadhan",
     # English
     "how to prevent", "prevention", "prevent", "how to control", "control", "how to manage",
     "manage", "management", "how to stop", "stop this", "how to treat", "remedy", "protect"
@@ -78,6 +79,7 @@ WATER_PATTERNS = [
     "నీరు", "నీటి", "పారుదల", "తడి", "నీళ్ళు", "ఎప్పుడు పెట్టాలి", "ఎప్పుడు పోయాలి", "తడులు",
     # Hindi: "सिंचाई", "पानी कब दें"
     "सिंचाई", "पानी कब दें", "पानी कब लगाएं", "पानी", "जल",
+    "paani", "pani", "sinchai", "paani kab", "pani kab",
     # English
     "when to water", "watering", "how often to water", "water", "irrigation"
 ]
@@ -87,6 +89,7 @@ SPRAY_PATTERNS = [
     "మందు", "స్ప్రే", "పిచికారీ", "పురుగుల", "దవా", "రసాయనం",
     # Hindi: "दवा", "छिड़काव", "कीटनाशक"
     "दवा", "छिड़काव", "कीटनाशक", "दवाई", "स्प्रे",
+    "dawa", "dawai", "chidkaw", "keetnashak", "kitnashak", "spray",
     # English
     "spray", "spraying", "chemical", "pesticide", "fungicide", "medicine"
 ]
@@ -96,6 +99,7 @@ SPOTS_PATTERNS = [
     "మచ్చలు", "తెగులు", "మచ్చ", "మాడు", "లక్షణాలు", "రంగు మారడం", "పసుపు", "పాలిపోవడం",
     # Hindi
     "धब्बे", "झुलसा", "दाग", "लक्षण", "पीला", "पीलापन",
+    "dhabbe", "dhabba", "daag", "peela", "peele", "peelapan", "jhulsa", "lakshan",
     # English
     "spot", "spots", "lesion", "blight", "symptom", "symptoms", "markings", "yellowing", "yellow"
 ]
@@ -105,6 +109,7 @@ RUST_PATTERNS = [
     "తుప్పు", "రస్ట్", "పౌడర్", "బూజు", "గేరువా",
     # Hindi
     "गेरुआ", "रतुआ", "चूर्ण", "फफूंद",
+    "gerua", "ratua", "churna", "fafund", "fungus",
     # English
     "rust", "pustule", "powder", "mildew"
 ]
@@ -114,6 +119,7 @@ WEATHER_PATTERNS = [
     "వాతావరణం", "వర్షం", "మంచు", "తేమ", "ఎండ",
     # Hindi
     "मौसम", "बारिश", "कोहरा", "नमी",
+    "mausam", "barish", "kohra", "nami",
     # English
     "weather", "rain", "fog", "humidity"
 ]
@@ -123,6 +129,7 @@ EXPERT_PATTERNS = [
     "అధికారి", "శాస్త్రవేత్త", "కేంద్రం", "కృషి", "విజ్ఞాన", "సహాయం", "డాక్టర్",
     # Hindi
     "विशेषज्ञ", "अधिकारी", "कृषि विज्ञान", "केवीके",
+    "visheshagya", "adhikari", "krishi vigyan", "kvk",
     # English
     "expert", "officer", "doctor", "kvk", "extension"
 ]
@@ -132,6 +139,7 @@ GENERAL_ACTION_PATTERNS = [
     "ఏమి చేయాలి", "ఏం చేయాలి", "తక్షణమే", "ఇప్పుడు ఏం చేయాలి",
     # Hindi
     "क्या करें", "तुरंत क्या करें", "अब क्या करें",
+    "kya kare", "kya karein", "turant kya kare", "ab kya kare", "kaise theek kare",
     # English
     "what should i do", "what to do", "immediately", "immediate action", "next steps"
 ]

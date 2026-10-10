@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Camera, 
   History, 
   CloudSun, 
   Volume2, 
+  VolumeX,
   Bell, 
   ArrowRight, 
   Layers, 
@@ -111,10 +112,31 @@ export const HomePage: React.FC<HomePageProps> = ({
     SpeechAssistant.speak(text, currentLang);
   };
 
-  const handleTeluguVoiceGuide = () => {
-    onLanguageChange('te');
-    const teluguSpeechText = "నమస్కారం! అవని స్మార్ట్ అగ్రికల్చర్ యాప్‌కు స్వాగతం. మీ పంట ఆకు ఫోటో తీసి స్కాన్ చేయండి లేదా నమూనా ఆకును ఎంచుకోండి. మేము వెంటనే తెగులును గుర్తించి, మీకు నివారణ ప్రణాళికను తెలుగులోనే తెలియజేస్తాము.";
-    SpeechAssistant.speak(teluguSpeechText, 'te');
+  const [playingVoiceLang, setPlayingVoiceLang] = useState<Language | null>(null);
+
+  const handleVoiceGuide = (targetLang: Language) => {
+    if (playingVoiceLang === targetLang) {
+      SpeechAssistant.stop();
+      setPlayingVoiceLang(null);
+      return;
+    }
+
+    SpeechAssistant.stop();
+    onLanguageChange(targetLang);
+    setPlayingVoiceLang(targetLang);
+
+    let textToSpeak = "";
+    if (targetLang === 'te') {
+      textToSpeak = "నమస్కారం! అవని స్మార్ట్ అగ్రికల్చర్ యాప్‌కు స్వాగతం. మీ పంట ఆకు ఫోటో తీసి స్కాన్ చేయండి లేదా నమూనా ఆకును ఎంచుకోండి. మేము వెంటనే తెగులును గుర్తించి, మీకు నివారణ ప్రణాళికను తెలుగులోనే తెలియజేస్తాము.";
+    } else if (targetLang === 'hi') {
+      textToSpeak = "नमस्ते! अवनी स्मार्ट एग्रीकल्चर ऐप में आपका स्वागत है। अपनी फसल की पत्ती की तस्वीर लें या नीचे दिए गए नमूने चुनें। हम तुरंत फसल रोग की पहचान करके आपको सम्पूर्ण उपचार और रोकथाम योजना हिन्दी में बताएंगे।";
+    } else {
+      textToSpeak = "Welcome to Avani Smart Agriculture. Scan your crop leaf or test sample leaves below. We immediately detect crop diseases and provide verified recovery guidance in English, Telugu, and Hindi.";
+    }
+
+    SpeechAssistant.speak(textToSpeak, targetLang, () => {
+      setPlayingVoiceLang(null);
+    });
   };
 
   const labels = {
@@ -126,6 +148,9 @@ export const HomePage: React.FC<HomePageProps> = ({
       scanNowBtn: "Start Leaf Scan ↗",
       trySamplesBtn: "Test Dataset Leaves",
       voiceTeluguBtn: "🔊 తెలుగులో వినండి (Telugu Voice)",
+      voiceHindiBtn: "🔊 हिन्दी में सुनें (Hindi Voice)",
+      voiceAssistantBtn: "Voice Assistant",
+      voiceStopBtn: "⏹ Stop Audio",
       statAccuracy: "38 Plant Classes",
       statAccuracyDesc: "MobileNetV2 Taxonomic Classifier",
       howItWorksTitle: "How It Works",
@@ -160,6 +185,9 @@ export const HomePage: React.FC<HomePageProps> = ({
       scanNowBtn: "ఆకు స్కాన్ ప్రారంభించండి ↗",
       trySamplesBtn: "నమూనా ఆకులను చూడండి",
       voiceTeluguBtn: "🔊 తెలుగులో వినండి",
+      voiceHindiBtn: "🔊 हिन्दीలో వినండి (Hindi Voice)",
+      voiceAssistantBtn: "వాయిస్ అసిస్టెంట్",
+      voiceStopBtn: "⏹ వాయిస్ ఆపండి",
       statAccuracy: "38 రకాల పంట వ్యాధులు",
       statAccuracyDesc: "కంప్యూటర్ విజన్ వర్గీకరణ",
       howItWorksTitle: "ఇది ఎలా పనిచేస్తుంది",
@@ -193,7 +221,10 @@ export const HomePage: React.FC<HomePageProps> = ({
       heroSub: "कंप्यूटर विज़न, HSV रंग विभाजन और व्यावहारिक कार्ययोजना द्वारा फसल में बीमारी फैलने से पहले ही तुरंत सटीक कदम उठाएं।",
       scanNowBtn: "पत्ती स्कैन शुरू करें ↗",
       trySamplesBtn: "असली नमूने देखें",
+      voiceHindiBtn: "🔊 हिन्दी में सुनें (Hindi Voice)",
       voiceTeluguBtn: "🔊 तेलुगु में सुनें",
+      voiceAssistantBtn: "वॉयस असिस्टेंट",
+      voiceStopBtn: "⏹ आवाज़ बंद करें",
       statAccuracy: "38 फसल व्याधियां",
       statAccuracyDesc: "सटीक पौध रोग वर्गीकरण",
       howItWorksTitle: "यह कैसे काम करता है",
@@ -384,16 +415,111 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <span>{labels.trySamplesBtn}</span>
               </a>
 
-              {/* Voice in Telugu (Prominent Audio Assistance) */}
-              <button
-                type="button"
-                onClick={handleTeluguVoiceGuide}
-                className="px-5 py-3.5 rounded-full bg-emerald-950/70 hover:bg-emerald-900/80 text-white font-bold text-xs sm:text-sm backdrop-blur-md border border-emerald-400/50 shadow-lg transition-all cursor-pointer flex items-center space-x-2 group hover:scale-105"
-                title="తెలుగులో సూచనలు వినండి (Listen in Telugu)"
-              >
-                <Volume2 className="w-4 h-4 text-[#d4f04e] group-hover:scale-110 animate-pulse" />
-                <span>{labels.voiceTeluguBtn}</span>
-              </button>
+              {/* Regional Audio Guidance (Hindi & Telugu) */}
+              {currentLang === 'hi' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleVoiceGuide('hi')}
+                    className={`px-5 py-3.5 rounded-full ${
+                      playingVoiceLang === 'hi'
+                        ? 'bg-secondary ring-2 ring-[#d4f04e] text-cream'
+                        : 'bg-emerald-950/70 hover:bg-emerald-900/80 text-white'
+                    } font-bold text-xs sm:text-sm backdrop-blur-md border border-emerald-400/50 shadow-lg transition-all cursor-pointer flex items-center space-x-2 group hover:scale-105`}
+                    title="हिन्दी में बोलकर मार्गदर्शन सुनें (Listen to Hindi Voice Guidance)"
+                    id="hero-hindi-voice-btn"
+                  >
+                    {playingVoiceLang === 'hi' ? (
+                      <VolumeX className="w-4 h-4 text-[#d4f04e] animate-pulse" />
+                    ) : (
+                      <Volume2 className="w-4 h-4 text-[#d4f04e] group-hover:scale-110 animate-pulse" />
+                    )}
+                    <span>{playingVoiceLang === 'hi' ? labels.voiceStopBtn : labels.voiceHindiBtn}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleVoiceGuide('te')}
+                    className="px-4 py-3.5 rounded-full bg-black/40 hover:bg-black/60 text-white/90 hover:text-white font-medium text-xs sm:text-sm backdrop-blur-md border border-white/20 shadow-md transition-all cursor-pointer flex items-center space-x-1.5"
+                    title="తెలుగులో సూచనలు వినండి (Listen in Telugu)"
+                  >
+                    <Volume2 className="w-3.5 h-3.5 text-white/70" />
+                    <span>{labels.voiceTeluguBtn}</span>
+                  </button>
+                </>
+              ) : currentLang === 'te' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleVoiceGuide('te')}
+                    className={`px-5 py-3.5 rounded-full ${
+                      playingVoiceLang === 'te'
+                        ? 'bg-secondary ring-2 ring-[#d4f04e] text-cream'
+                        : 'bg-emerald-950/70 hover:bg-emerald-900/80 text-white'
+                    } font-bold text-xs sm:text-sm backdrop-blur-md border border-emerald-400/50 shadow-lg transition-all cursor-pointer flex items-center space-x-2 group hover:scale-105`}
+                    title="తెలుగులో సూచనలు వినండి (Listen in Telugu)"
+                    id="hero-telugu-voice-btn"
+                  >
+                    {playingVoiceLang === 'te' ? (
+                      <VolumeX className="w-4 h-4 text-[#d4f04e] animate-pulse" />
+                    ) : (
+                      <Volume2 className="w-4 h-4 text-[#d4f04e] group-hover:scale-110 animate-pulse" />
+                    )}
+                    <span>{playingVoiceLang === 'te' ? labels.voiceStopBtn : labels.voiceTeluguBtn}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleVoiceGuide('hi')}
+                    className="px-4 py-3.5 rounded-full bg-black/40 hover:bg-black/60 text-white/90 hover:text-white font-medium text-xs sm:text-sm backdrop-blur-md border border-white/20 shadow-md transition-all cursor-pointer flex items-center space-x-1.5"
+                    title="हिन्दी में सुनें (Listen in Hindi)"
+                  >
+                    <Volume2 className="w-3.5 h-3.5 text-white/70" />
+                    <span>{labels.voiceHindiBtn}</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  {/* English Mode: Prominent options for both Telugu and Hindi Voice Guide */}
+                  <button
+                    type="button"
+                    onClick={() => handleVoiceGuide('te')}
+                    className={`px-4 sm:px-5 py-3.5 rounded-full ${
+                      playingVoiceLang === 'te'
+                        ? 'bg-secondary ring-2 ring-[#d4f04e] text-cream'
+                        : 'bg-emerald-950/70 hover:bg-emerald-900/80 text-white'
+                    } font-bold text-xs sm:text-sm backdrop-blur-md border border-emerald-400/50 shadow-lg transition-all cursor-pointer flex items-center space-x-2 group hover:scale-105`}
+                    title="తెలుగులో సూచనలు వినండి (Listen in Telugu)"
+                    id="hero-telugu-voice-btn"
+                  >
+                    {playingVoiceLang === 'te' ? (
+                      <VolumeX className="w-4 h-4 text-[#d4f04e] animate-pulse" />
+                    ) : (
+                      <Volume2 className="w-4 h-4 text-[#d4f04e] group-hover:scale-110 animate-pulse" />
+                    )}
+                    <span>{playingVoiceLang === 'te' ? labels.voiceStopBtn : labels.voiceTeluguBtn}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleVoiceGuide('hi')}
+                    className={`px-4 sm:px-5 py-3.5 rounded-full ${
+                      playingVoiceLang === 'hi'
+                        ? 'bg-secondary ring-2 ring-[#d4f04e] text-cream'
+                        : 'bg-emerald-950/70 hover:bg-emerald-900/80 text-white'
+                    } font-bold text-xs sm:text-sm backdrop-blur-md border border-emerald-400/50 shadow-lg transition-all cursor-pointer flex items-center space-x-2 group hover:scale-105`}
+                    title="हिन्दी में बोलकर मार्गदर्शन सुनें (Listen to Hindi Voice Guidance)"
+                    id="hero-hindi-voice-btn"
+                  >
+                    {playingVoiceLang === 'hi' ? (
+                      <VolumeX className="w-4 h-4 text-[#d4f04e] animate-pulse" />
+                    ) : (
+                      <Volume2 className="w-4 h-4 text-[#d4f04e] group-hover:scale-110 animate-pulse" />
+                    )}
+                    <span>{playingVoiceLang === 'hi' ? labels.voiceStopBtn : labels.voiceHindiBtn}</span>
+                  </button>
+                </>
+              )}
 
               {/* Interactive Voice Assistant */}
               {onOpenVoiceAssistant && (
@@ -405,7 +531,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   id="hero-voice-assistant-btn"
                 >
                   <Mic className="w-4 h-4 text-[#d4f04e] group-hover:scale-110" />
-                  <span>Voice Assistant</span>
+                  <span>{labels.voiceAssistantBtn}</span>
                 </button>
               )}
 

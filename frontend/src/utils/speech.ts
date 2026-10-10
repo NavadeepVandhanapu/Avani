@@ -16,6 +16,7 @@ export class SpeechAssistant {
   private static recognition: SpeechRecognitionType | null = null;
   private static isListening: boolean = false;
   private static audioPlayer: HTMLAudioElement | null = null;
+  private static currentAudioToken: number = 0;
 
   public static isTTSSupported(): boolean {
     return true; // Supported either via backend audio streaming or browser synthesis
@@ -48,6 +49,7 @@ export class SpeechAssistant {
     onVoiceUnavailable?: () => void
   ): void {
     this.stop();
+    const token = ++this.currentAudioToken;
 
     const targetLang = this.getBCP47Lang(lang);
 
@@ -68,6 +70,7 @@ export class SpeechAssistant {
     if (shouldUseBackendTTS) {
       fetchTTSAudio(text, lang)
         .then(blob => {
+          if (this.currentAudioToken !== token) return;
           const audioUrl = URL.createObjectURL(blob);
           const audio = new Audio(audioUrl);
           this.audioPlayer = audio;
@@ -75,26 +78,32 @@ export class SpeechAssistant {
           audio.onended = () => {
             URL.revokeObjectURL(audioUrl);
             this.audioPlayer = null;
-            if (onEnd) onEnd();
+            if (this.currentAudioToken === token && onEnd) onEnd();
           };
 
           audio.onerror = (e) => {
             console.warn("Backend audio playback error, falling back to browser speech:", e);
             URL.revokeObjectURL(audioUrl);
             this.audioPlayer = null;
-            this.speakWithBrowserSynth(text, lang, matchingVoice, onEnd, onVoiceUnavailable);
+            if (this.currentAudioToken === token) {
+              this.speakWithBrowserSynth(text, lang, matchingVoice, onEnd, onVoiceUnavailable);
+            }
           };
 
           audio.play().catch(err => {
             console.warn("Audio autoplay error, falling back to browser speech:", err);
             URL.revokeObjectURL(audioUrl);
             this.audioPlayer = null;
-            this.speakWithBrowserSynth(text, lang, matchingVoice, onEnd, onVoiceUnavailable);
+            if (this.currentAudioToken === token) {
+              this.speakWithBrowserSynth(text, lang, matchingVoice, onEnd, onVoiceUnavailable);
+            }
           });
         })
         .catch(err => {
           console.warn("Backend TTS request error, falling back to browser speech:", err);
-          this.speakWithBrowserSynth(text, lang, matchingVoice, onEnd, onVoiceUnavailable);
+          if (this.currentAudioToken === token) {
+            this.speakWithBrowserSynth(text, lang, matchingVoice, onEnd, onVoiceUnavailable);
+          }
         });
       return;
     }
@@ -141,6 +150,7 @@ export class SpeechAssistant {
   }
 
   public static stop(): void {
+    this.currentAudioToken++;
     if (this.synth) {
       this.synth.cancel();
     }

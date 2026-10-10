@@ -45,6 +45,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   const [responseAnswer, setResponseAnswer] = useState<string | null>(null);
   const [responsePointers, setResponsePointers] = useState<string[]>([]);
   const [matchedCrop, setMatchedCrop] = useState<string | null>(null);
+  const [responseLang, setResponseLang] = useState<Language>(currentLang);
   const [isSpeakingResponse, setIsSpeakingResponse] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -58,6 +59,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     } else {
       setErrorMessage(null);
       setVoiceUnavailableWarning(null);
+      setResponseLang(currentLang);
     }
   }, [isOpen, currentLang]);
 
@@ -122,8 +124,8 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       if (code >= 0x0C00 && code <= 0x0C7F) teluguCount++;
       if (code >= 0x0900 && code <= 0x097F) hindiCount++;
     }
-    if (teluguCount >= 3) return 'te';
-    if (hindiCount >= 3) return 'hi';
+    if (teluguCount >= 1) return 'te';
+    if (hindiCount >= 1) return 'hi';
     return currentLang; // fallback to app language
   };
 
@@ -133,6 +135,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
 
     // Auto-detect input language from query text
     const detectedLang = detectInputLanguage(queryToSend);
+    setResponseLang(detectedLang);
 
     // Stop listening or speaking
     SpeechAssistant.stop();
@@ -457,7 +460,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                   ) : (
                     <button
                       type="button"
-                      onClick={() => playResponseAudio(responseAnswer)}
+                      onClick={() => playResponseAudio(responseAnswer, responseLang)}
                       className="px-2.5 py-1 rounded bg-primary/10 hover:bg-primary/20 text-primary text-xs font-medium flex items-center space-x-1 cursor-pointer transition-colors"
                       title="Replay audio"
                     >
