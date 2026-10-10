@@ -14,7 +14,7 @@ import json
 from model_service import classifier, CLASS_METADATA, PLANT_VILLAGE_CLASSES
 from guidance_service import generate_action_plan
 from guidance_data import GUIDANCE_DATABASE
-from database import init_db, save_scan, get_all_scans, delete_scan
+from database import init_db, save_scan, get_all_scans, delete_scan, save_feedback
 from weather_service import get_weather_data
 from translations import TRANSLATIONS
 
@@ -57,6 +57,14 @@ class SaveScanRequest(BaseModel):
     image_preview: Optional[str] = None
     follow_up_answers: Optional[Dict[str, Any]] = None
     guidance_summary: Optional[Dict[str, Any]] = None
+
+class FeedbackRequest(BaseModel):
+    scan_id: Optional[str] = None
+    predicted_class: str
+    rating: str = "accurate"  # "accurate", "partial", "incorrect"
+    is_accurate: bool = True
+    actual_condition: Optional[str] = None
+    notes: Optional[str] = None
 
 @app.get("/api/health")
 def health_check():
@@ -149,8 +157,14 @@ def remove_scan(scan_id: str):
         raise HTTPException(status_code=404, detail="Scan not found.")
     return {"success": True, "deleted_id": scan_id}
 
+@app.post("/api/feedback")
+def submit_farmer_feedback(req: FeedbackRequest):
+    """Saves farmer validation feedback for adaptive continuous learning."""
+    saved = save_feedback(req.model_dump())
+    return {"success": True, "feedback": saved}
+
 @app.get("/api/weather")
-def get_weather(location: str = "Warangal, Telangana", lat: Optional[float] = None, lon: Optional[float] = None):
+def get_weather(location: str = "Hyderabad, Telangana", lat: Optional[float] = None, lon: Optional[float] = None):
     """Provides agro-meteorological conditions and disease risk indexing."""
     weather = get_weather_data(location=location, lat=lat, lon=lon)
     return weather

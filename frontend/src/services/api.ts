@@ -86,14 +86,35 @@ export async function deleteScanRecord(scanId: string): Promise<boolean> {
   return res.ok;
 }
 
-export async function fetchWeatherData(location?: string): Promise<WeatherData> {
-  const url = location 
-    ? `${API_BASE}/weather?location=${encodeURIComponent(location)}`
-    : `${API_BASE}/weather`;
+export async function fetchWeatherData(location?: string, lat?: number, lon?: number): Promise<WeatherData> {
+  let url = `${API_BASE}/weather`;
+  const params = new URLSearchParams();
+  if (location) params.append('location', location);
+  if (lat !== undefined && lon !== undefined) {
+    params.append('lat', lat.toString());
+    params.append('lon', lon.toString());
+  }
+  if (params.toString()) {
+    url += `?${params.toString()}`;
+  }
     
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error('Failed to retrieve weather advisory.');
   }
   return await res.json();
+}
+
+export async function submitFarmerFeedback(feedback: any): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(feedback),
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('Feedback submission failed:', err);
+    return false;
+  }
 }

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, Sparkles, Volume2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, ArrowRight, Check, Sparkles, Volume2, Mic, Radio } from 'lucide-react';
 import type { Language, FollowUpAnswers } from '../types';
 import { TRANSLATIONS } from '../translations';
-import { SpeechAssistant } from '../utils/speech';
+import { SpeechAssistant, VoiceInputService } from '../utils/speech';
 
 interface FollowUpQuestionnaireProps {
   currentLang: Language;
@@ -234,6 +234,68 @@ export const FollowUpQuestionnaire: React.FC<FollowUpQuestionnaireProps> = ({
     SpeechAssistant.speak(qText, currentLang);
   };
 
+  const [isListening, setIsListening] = useState(false);
+  const [spokenTranscript, setSpokenTranscript] = useState('');
+  const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      VoiceInputService.stopListening();
+    };
+  }, []);
+
+  useEffect(() => {
+    setSpokenTranscript('');
+    setVoiceFeedback(null);
+    VoiceInputService.stopListening();
+    setIsListening(false);
+  }, [currentIndex]);
+
+  const toggleVoiceInput = () => {
+    if (isListening) {
+      VoiceInputService.stopListening();
+      setIsListening(false);
+      return;
+    }
+
+    setSpokenTranscript('');
+    setVoiceFeedback(null);
+    setIsListening(true);
+
+    VoiceInputService.startListening({
+      lang: currentLang,
+      onResult: (transcript, isFinal) => {
+        setSpokenTranscript(transcript);
+
+        const lower = transcript.toLowerCase();
+        if (lower.includes('next') || lower.includes('తరువాత') || lower.includes('आगे') || lower.includes('ముందుకు')) {
+          handleNext();
+          VoiceInputService.stopListening();
+          setIsListening(false);
+          return;
+        }
+
+        const matched = VoiceInputService.matchOption(transcript, currentQ.options, currentLang);
+        if (matched) {
+          handleSelectOption(matched);
+          const opt = currentQ.options.find(o => o.value === matched);
+          const optName = opt ? opt.label[currentLang] : matched;
+          setVoiceFeedback(`✓ ${optName}`);
+          if (isFinal) {
+            SpeechAssistant.speak(`Selected ${optName}`, currentLang);
+          }
+        }
+      },
+      onError: (err) => {
+        console.warn('Voice recognition error:', err);
+        setIsListening(false);
+      },
+      onEnd: () => {
+        setIsListening(false);
+      }
+    });
+  };
+
   const selectedVal = answers[currentQ.id];
 
   return (
@@ -252,14 +314,17 @@ export const FollowUpQuestionnaire: React.FC<FollowUpQuestionnaireProps> = ({
           </h2>
         </div>
 
-        <button
-          onClick={handleReadQuestion}
-          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-warmborder bg-cream hover:bg-ivory text-xs font-medium text-charcoal shadow-subtle"
-          title={t.btn_listen_tts}
-        >
-          <Volume2 className="w-3.5 h-3.5 text-primary" />
-          <span className="hidden sm:inline">{t.btn_listen_tts}</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          {/* Read question aloud */}
+          <button
+            onClick={handleReadQuestion}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-warmborder bg-cream hover:bg-ivory text-xs font-medium text-charcoal shadow-subtle cursor-pointer"
+            title={t.btn_listen_tts}
+          >
+            <Volume2 className="w-3.5 h-3.5 text-primary" />
+            <span className="hidden sm:inline">{t.btn_listen_tts}</span>
+          </button>
+        </div>
       </div>
 
       {/* Progress Bar */}
@@ -273,14 +338,59 @@ export const FollowUpQuestionnaire: React.FC<FollowUpQuestionnaireProps> = ({
       {/* Question Card */}
       <div className="bg-cream border border-warmborder rounded-card p-6 sm:p-8 shadow-card">
         
-        <div className="mb-6">
-          <h3 className="text-lg sm:text-xl font-bold text-charcoal font-sans">
-            {currentQ.question[currentLang]}
-          </h3>
-          <p className="text-xs sm:text-sm text-muted mt-1">
-            {currentQ.subtitle[currentLang]}
-          </p>
+        <div className="mb-5 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg sm:text-xl font-bold text-charcoal font-sans">
+              {currentQ.question[currentLang]}
+            </h3>
+            <p className="text-xs sm:text-sm text-muted mt-1">
+              {currentQ.subtitle[currentLang]}
+            </p>
+          </div>
+
+          {/* Voice Answer Mic Button */}
+          <button
+            type="button"
+            onClick={toggleVoiceInput}
+            className={`flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-2 transition-all cursor-pointer shadow-subtle ${
+              isListening
+                ? 'bg-danger text-white animate-pulse ring-2 ring-danger/40'
+                : 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary hover:text-white'
+            }`}
+            title="Speak your answer in Telugu, Hindi, or English"
+          >
+            {isListening ? (
+              <>
+                <Radio className="w-4 h-4 animate-spin text-white" />
+                <span>Listening ({currentLang === 'te' ? 'తెలుగు' : currentLang === 'hi' ? 'हिन्दी' : 'English'})...</span>
+              </>
+            ) : (
+              <>
+                <Mic className="w-4 h-4" />
+                <span>{currentLang === 'te' ? 'వాయిస్ సమాధానం' : currentLang === 'hi' ? 'बोलकर उत्तर दें' : 'Speak Answer'}</span>
+              </>
+            )}
+          </button>
         </div>
+
+        {/* Live Spoken Transcript Feedback */}
+        {(isListening || spokenTranscript || voiceFeedback) && (
+          <div className="mb-5 p-3 rounded-xl bg-ivory border border-warmborder text-xs flex flex-wrap items-center justify-between gap-2 animate-fadeIn">
+            <div className="flex items-center space-x-2">
+              <span className="font-semibold text-charcoal">
+                {isListening ? '🎙️ Spoken Input:' : '🗣️ Captured:'}
+              </span>
+              <span className="text-primary font-medium italic">
+                {spokenTranscript || (isListening ? 'Speak now in your chosen language...' : '')}
+              </span>
+            </div>
+            {voiceFeedback && (
+              <span className="bg-secondary/20 text-primary-dark px-2.5 py-0.5 rounded-full font-bold text-[11px]">
+                {voiceFeedback}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Option Choices */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">

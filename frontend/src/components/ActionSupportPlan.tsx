@@ -10,7 +10,8 @@ import {
   Square, 
   Building2, 
   Clock, 
-  FileCheck2
+  FileCheck2,
+  Printer
 } from 'lucide-react';
 import type { Language, ActionPlanResponse, TimelineActionItem } from '../types';
 import { TRANSLATIONS } from '../translations';
@@ -22,6 +23,7 @@ interface ActionSupportPlanProps {
   onSaveScan: () => void;
   isSaved: boolean;
   onScanAnother: () => void;
+  weatherData?: any;
 }
 
 export const ActionSupportPlan: React.FC<ActionSupportPlanProps> = ({
@@ -29,7 +31,8 @@ export const ActionSupportPlan: React.FC<ActionSupportPlanProps> = ({
   plan,
   onSaveScan,
   isSaved,
-  onScanAnother
+  onScanAnother,
+  weatherData
 }) => {
   const t = TRANSLATIONS[currentLang];
 
@@ -111,16 +114,40 @@ export const ActionSupportPlan: React.FC<ActionSupportPlanProps> = ({
             <span>{isSaved ? t.btn_saved_done : t.btn_save_scan}</span>
           </button>
 
+          <button
+            onClick={() => window.print()}
+            className="flex items-center space-x-1.5 px-3 py-2 rounded-natural border border-warmborder bg-cream hover:bg-ivory text-charcoal text-xs font-semibold shadow-subtle cursor-pointer"
+            title="Print or Save Action Card"
+          >
+            <Printer className="w-4 h-4 text-primary" />
+            <span className="hidden sm:inline">Print Card</span>
+          </button>
+
         </div>
       </div>
 
       {/* Summary Chips */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5">
         {plan.summary_bullets?.map((bullet, idx) => (
           <div key={idx} className="p-2.5 rounded-natural bg-ivory border border-warmborder text-[11px] font-medium text-charcoal">
             {bullet}
           </div>
         ))}
+      </div>
+
+      {/* Agro-Meteorological Weather & Soil Alert (Slide 3 & 5) */}
+      <div className="mb-5 p-4 rounded-natural bg-ochre/10 border border-ochre/30 flex items-start space-x-3 text-xs shadow-subtle">
+        <span className="text-xl flex-shrink-0">⛅</span>
+        <div>
+          <span className="font-bold text-charcoal block text-xs sm:text-sm">
+            🌾 Agro-Meteorological Advisory {weatherData ? `(${weatherData.location} • ${weatherData.temperature}°C • ${weatherData.condition})` : ''}
+          </span>
+          <p className="text-secondary-dark mt-1 leading-relaxed">
+            {weatherData?.rainfall_mm > 0 || weatherData?.humidity > 75 
+              ? "⚠️ High moisture detected: Delay foliar fertilizer application, ensure field drainage furrows are cleared, and avoid handling plants while leaves are wet to prevent spreading spores."
+              : "⚠️ Field Weather Alert: In case of rain forecast in next 48 hours, delay chemical/fertilizer spray and verify soil drainage channels."}
+          </p>
+        </div>
       </div>
 
       {/* Section 1: What to Check Now */}
@@ -209,6 +236,25 @@ export const ActionSupportPlan: React.FC<ActionSupportPlanProps> = ({
           <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-ivory border border-warmborder text-secondary-dark">
             {completedCount} / {tasks.length} Completed
           </span>
+        </div>
+
+        {/* Visual Action TIMELINE Stepper (Slide 3 & 4) */}
+        <div className="grid grid-cols-3 gap-2 mb-5 p-3 rounded-xl bg-ivory border border-warmborder text-center shadow-subtle">
+          <div className="flex flex-col items-center">
+            <span className="w-6 h-6 rounded-full bg-primary text-cream font-bold text-xs flex items-center justify-center mb-1 shadow-subtle">1</span>
+            <span className="text-[11px] font-bold text-primary">Today</span>
+            <span className="text-[10px] text-muted">Immediate inspection</span>
+          </div>
+          <div className="flex flex-col items-center border-x border-warmborder px-1">
+            <span className="w-6 h-6 rounded-full bg-secondary text-cream font-bold text-xs flex items-center justify-center mb-1 shadow-subtle">2</span>
+            <span className="text-[11px] font-bold text-secondary-dark">Days 2 to 3</span>
+            <span className="text-[10px] text-muted">Spread monitoring</span>
+          </div>
+          <div className="flex flex-col items-center">
+            <span className="w-6 h-6 rounded-full bg-ochre text-cream font-bold text-xs flex items-center justify-center mb-1 shadow-subtle">3</span>
+            <span className="text-[11px] font-bold text-ochre">After 5 Days</span>
+            <span className="text-[10px] text-muted">KVK escalation check</span>
+          </div>
         </div>
 
         <div className="space-y-2.5">

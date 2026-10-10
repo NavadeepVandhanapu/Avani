@@ -7,6 +7,15 @@ export interface ModelPrediction {
   condition: string;
 }
 
+export interface HSVSegmentationData {
+  healthy_percentage: number;
+  lesion_percentage: number;
+  leaf_coverage_ratio: number;
+  chlorosis_yellow_pct?: number;
+  necrosis_brown_pct?: number;
+  segmentation_mask_url?: string;
+}
+
 export interface PredictionResponse {
   success: boolean;
   is_leaf_detected: boolean;
@@ -27,6 +36,7 @@ export interface PredictionResponse {
     excess_green: number;
     color_variance: number;
   };
+  hsv_segmentation?: HSVSegmentationData;
   error?: string;
 }
 
@@ -98,4 +108,13 @@ export interface SavedScan {
   image_preview?: string;
   follow_up_answers?: FollowUpAnswers;
   guidance_summary?: ActionPlanResponse;
+}
+
+export interface FarmerFeedback {
+  scan_id?: string;
+  predicted_class: string;
+  rating: 'accurate' | 'partial' | 'incorrect';
+  is_accurate: boolean;
+  actual_condition?: string;
+  notes?: string;
 }
