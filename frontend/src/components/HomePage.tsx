@@ -21,6 +21,7 @@ interface HomePageProps {
   currentLang: Language;
   onLanguageChange: (lang: Language) => void;
   onStartScan: () => void;
+  onStartCameraScan?: () => void;
   onOpenHistory: () => void;
   onOpenWeather: () => void;
   onOpenNotifications: () => void;
@@ -92,6 +93,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   currentLang,
   onLanguageChange,
   onStartScan,
+  onStartCameraScan,
   onOpenHistory,
   onOpenWeather,
   onOpenNotifications,
@@ -345,10 +347,10 @@ export const HomePage: React.FC<HomePageProps> = ({
               {labels.heroSub}
             </p>
 
-            {/* Action Buttons: Glowing Lime Pill + Translucent Frosted Pill + Telugu Voice */}
+            {/* Action Buttons: Glowing Lime Pill + Camera Scan + Translucent Frosted Pill + Telugu Voice */}
             <div className="mt-8 flex flex-wrap items-center gap-3.5">
               
-              {/* Primary: Lime Green Pill Button (Exact Agrovia Style) */}
+              {/* Primary: Lime Green Pill Button */}
               <button
                 onClick={onStartScan}
                 id="hero-scan-leaf-btn"
@@ -357,6 +359,19 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <Camera className="w-5 h-5 text-gray-950 group-hover:scale-110 transition-transform" />
                 <span>{labels.scanNowBtn}</span>
               </button>
+
+              {/* Direct Live Camera Option for Real-Life Field Scan */}
+              {onStartCameraScan && (
+                <button
+                  type="button"
+                  onClick={onStartCameraScan}
+                  className="px-6 py-3.5 rounded-full bg-emerald-600/90 hover:bg-emerald-500 text-cream font-bold text-sm sm:text-base backdrop-blur-md border border-emerald-400/60 transition-all cursor-pointer flex items-center space-x-2 shadow-lg hover:scale-105 active:scale-95"
+                  title="Turn ON device camera directly to scan a living plant leaf in field"
+                >
+                  <Camera className="w-5 h-5 text-[#d4f04e]" />
+                  <span>{currentLang === 'te' ? '📷 లైవ్ కెమెరా ఆన్' : currentLang === 'hi' ? '📷 लाइव कैमरा चालू' : '📷 Live Field Camera'}</span>
+                </button>
+              )}
 
               {/* Secondary: Translucent Frosted Pill Button */}
               <a

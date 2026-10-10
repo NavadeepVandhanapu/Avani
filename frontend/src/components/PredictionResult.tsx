@@ -13,7 +13,8 @@ import {
   Layers,
   Eye,
   ThumbsUp,
-  ThumbsDown
+  ThumbsDown,
+  Camera
 } from 'lucide-react';
 import type { Language, PredictionResponse } from '../types';
 import { TRANSLATIONS } from '../translations';
@@ -27,6 +28,7 @@ interface PredictionResultProps {
   previewUrl: string;
   onProceedToQuestions: () => void;
   onScanAnother: () => void;
+  onScanWithCamera?: () => void;
 }
 
 export const PredictionResult: React.FC<PredictionResultProps> = ({
@@ -35,7 +37,8 @@ export const PredictionResult: React.FC<PredictionResultProps> = ({
   prediction,
   previewUrl,
   onProceedToQuestions,
-  onScanAnother
+  onScanAnother,
+  onScanWithCamera
 }) => {
   const t = TRANSLATIONS[currentLang];
 
@@ -131,12 +134,23 @@ export const PredictionResult: React.FC<PredictionResultProps> = ({
               {prediction.plain_explanation || "We could not find plant leaf features in this photo. Please hold a real crop leaf steady in good light and scan again."}
             </p>
 
-            <div className="mt-6">
+            <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
-                onClick={onScanAnother}
-                className="px-6 py-3.5 rounded-natural bg-primary hover:bg-primary-dark text-cream font-semibold text-sm shadow-subtle inline-flex items-center space-x-2 cursor-pointer"
+                type="button"
+                onClick={onScanWithCamera || onScanAnother}
+                className="w-full sm:w-auto px-6 py-3.5 rounded-natural bg-primary hover:bg-primary-dark text-cream font-bold text-sm shadow-subtle inline-flex items-center justify-center space-x-2 cursor-pointer transition-all active:scale-95"
+                id="invalid-camera-scan-btn"
               >
-                <RotateCcw className="w-4 h-4" />
+                <Camera className="w-5 h-5 text-cream" />
+                <span>{t.scan_real_camera || "Turn ON Camera (Scan Real Life Leaf)"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onScanAnother}
+                className="w-full sm:w-auto px-5 py-3.5 rounded-natural bg-ivory hover:bg-ivory-dark text-charcoal font-medium text-sm border border-warmborder inline-flex items-center justify-center space-x-2 cursor-pointer transition-colors"
+              >
+                <RotateCcw className="w-4 h-4 text-muted" />
                 <span>{t.scan_another_action}</span>
               </button>
             </div>
@@ -359,16 +373,56 @@ export const PredictionResult: React.FC<PredictionResultProps> = ({
               {t.preliminary_notice_simple}
             </div>
 
+            {/* Real Life Field Camera Banner (After-Scan Live Camera Feature) */}
+            <div className="mt-5 p-4 rounded-xl bg-gradient-to-r from-secondary/15 via-primary/5 to-cream border border-secondary/35 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-subtle">
+              <div className="flex items-center space-x-3 text-center sm:text-left">
+                <div className="w-10 h-10 rounded-xl bg-primary text-cream flex items-center justify-center flex-shrink-0 shadow-subtle">
+                  <Camera className="w-5 h-5 text-cream" />
+                </div>
+                <div>
+                  <span className="font-bold text-primary block text-xs sm:text-sm">
+                    📷 {t.scan_real_camera || "Scan a Real-Life Leaf (Turn ON Camera)"}
+                  </span>
+                  <span className="text-[11px] text-muted">
+                    {t.scan_real_camera_sub || "Scan directly on your living plant in the field using your device camera"}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onScanWithCamera || onScanAnother}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-lg bg-primary hover:bg-primary-dark active:scale-95 text-cream font-bold text-xs shadow-subtle flex items-center justify-center space-x-2 transition-all cursor-pointer whitespace-nowrap"
+                id="after-scan-live-camera-cta"
+              >
+                <Camera className="w-4 h-4 text-cream" />
+                <span>{t.turn_on_camera || "Turn ON Camera Now"}</span>
+              </button>
+            </div>
+
             {/* Obvious Next Actions */}
             <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-warmborder">
               
-              <button
-                onClick={onScanAnother}
-                className="w-full sm:w-auto px-5 py-3 rounded-natural bg-ivory hover:bg-ivory-dark text-charcoal font-medium text-xs sm:text-sm border border-warmborder transition-colors flex items-center justify-center space-x-2 cursor-pointer"
-              >
-                <RotateCcw className="w-4 h-4 text-muted" />
-                <span>{t.scan_another_action}</span>
-              </button>
+              <div className="flex items-center space-x-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={onScanWithCamera || onScanAnother}
+                  className="flex-1 sm:flex-none px-4 py-3 rounded-natural bg-secondary/15 hover:bg-secondary/25 border border-secondary/40 text-primary-dark font-bold text-xs sm:text-sm shadow-subtle flex items-center justify-center space-x-2 transition-all cursor-pointer"
+                  id="after-scan-camera-btn"
+                  title="Turn on live camera to capture a real plant leaf in field"
+                >
+                  <Camera className="w-4 h-4 text-secondary-dark" />
+                  <span>{t.scan_real_camera || "Scan Real Leaf (Camera)"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onScanAnother}
+                  className="flex-1 sm:flex-none px-3.5 py-3 rounded-natural bg-ivory hover:bg-ivory-dark text-charcoal font-medium text-xs sm:text-sm border border-warmborder transition-colors flex items-center justify-center space-x-1.5 cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4 text-muted" />
+                  <span>{t.scan_another_action}</span>
+                </button>
+              </div>
 
               <button
                 onClick={onProceedToQuestions}
