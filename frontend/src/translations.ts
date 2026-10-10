@@ -89,7 +89,19 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     wind: "Wind",
     disease_pressure: "Disease Pressure Risk",
     field_hygiene_advisory: "Foliage Hygiene Advisory",
-    // Voice Assistant
+
+    // HSV Spectral Pigmentation & Pointed Diagnostic Hotspots
+    hsv_tab_annotated: "Pointed Pins",
+    hsv_tab_heatmap: "HSV Heatmap",
+    hsv_tab_original: "Original Photo",
+    hsv_panel_title: "HSV Spectral Pigmentation & Marked Hotspots",
+    hsv_panel_subtitle: "Visual proof of color differences (chlorosis vs necrosis) analyzed on the leaf",
+    hsv_tap_pin_hint: "Tap any pin on the leaf or card below to inspect pigmentation finding",
+    hsv_hotspots_heading: "Pointed Findings on Leaf Surface",
+    hsv_finding_lesion: "Necrotic Lesion / Spore Cluster",
+    hsv_finding_chlorosis: "Chlorotic Halo (Yellowing)",
+    hsv_finding_healthy: "Healthy Chlorophyll Tissue",
+    hsv_finding_blight: "Spreading Lesion Margin",
     voice_assistant_btn: "Voice Assistant",
     voice_modal_title: "Avani Two-Way Voice Assistant",
     voice_modal_subtitle: "Speak in English, Telugu, or Hindi to ask crop questions",
@@ -211,6 +223,19 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     wind: "గాలి వేగం",
     disease_pressure: "వ్యాధి తీవ్రత ముప్పు",
     field_hygiene_advisory: "క్షేత్ర పరిశుభ్రత సలహా",
+
+    // HSV Spectral Pigmentation & Pointed Diagnostic Hotspots
+    hsv_tab_annotated: "గుర్తించిన గుర్తులు",
+    hsv_tab_heatmap: "రంగుల మ్యాప్",
+    hsv_tab_original: "అసలు ఫోటో",
+    hsv_panel_title: "HSV వర్ణద్రవ్య విశ్లేషణ & గుర్తించిన మచ్చలు",
+    hsv_panel_subtitle: "ఆకుపై తెగులు మచ్చలు మరియు పసుపు రంగు మార్పులను స్పష్టంగా చూపించే దృశ్య రూపం",
+    hsv_tap_pin_hint: "వివరాలను చూడటానికి ఆకుపై ఉన్న పిన్ లేదా క్రింది కార్డును తాకండి",
+    hsv_hotspots_heading: "ఆకుపై గుర్తించిన ముఖ్య లక్షణాలు",
+    hsv_finding_lesion: "తెగులు మచ్చ / కణజాల క్షీణత",
+    hsv_finding_chlorosis: "పత్రహరితం క్షీణత (పసుపు రంగు)",
+    hsv_finding_healthy: "ఆరోగ్యకరమైన ఆకుపచ్చ కణజాలం",
+    hsv_finding_blight: "వ్యాపిస్తున్న తెగులు అంచు",
     // Voice Assistant
     voice_assistant_btn: "వాయిస్ సహాయకుడు",
     voice_modal_title: "అవని వాయిస్ అసిస్టెంట్",
@@ -333,6 +358,19 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     wind: "हवा की गति",
     disease_pressure: "रोग संक्रमण का खतरा",
     field_hygiene_advisory: "खेत स्वच्छता सलाह",
+
+    // HSV Spectral Pigmentation & Pointed Diagnostic Hotspots
+    hsv_tab_annotated: "चिह्नित बिंदु",
+    hsv_tab_heatmap: "रंग मानचित्र (HSV)",
+    hsv_tab_original: "मूल फोटो",
+    hsv_panel_title: "HSV रंग विभाजन व चिह्नित लक्षण",
+    hsv_panel_subtitle: "पत्ती पर पीलेपन और सूखे धब्बों के सटीक अंतर का दृश्य प्रमाण",
+    hsv_tap_pin_hint: "विवरण देखने के लिए किसी भी पिन या नीचे दिए गए कार्ड को छुएं",
+    hsv_hotspots_heading: "पत्ती पर चिह्नित प्रमुख रंग लक्षण",
+    hsv_finding_lesion: "सूखा धब्बा / परिगलन (नेक्रोसिस)",
+    hsv_finding_chlorosis: "पीलापन / क्लोरोसिस घेरा",
+    hsv_finding_healthy: "स्वस्थ हरा ऊतक",
+    hsv_finding_blight: "फैलता हुआ रोग किनारा",
     // Voice Assistant
     voice_assistant_btn: "वॉयस असिस्टेंट",
     voice_modal_title: "अवनी वॉयस असिस्टेंट",

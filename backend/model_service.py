@@ -10,7 +10,7 @@ import json
 import base64
 import logging
 import numpy as np
-from PIL import Image, ImageStat
+from PIL import Image, ImageStat, ImageDraw
 from typing import Dict, Any, Tuple, Optional, List
 import onnxruntime as ort
 
@@ -234,6 +234,96 @@ class CropDiseaseClassifier:
             healthy_pct = round((healthy_count / total_leaf_pixels) * 100.0, 1)
             lesion_pct = round((lesion_count / total_leaf_pixels) * 100.0, 1)
 
+            # Calculate pinpoint hotspot coordinates for pigmentation differences
+            hotspots = []
+
+            # 1. Necrotic Lesion (Brown / Dark Necrosis)
+            if np.sum(brown_mask) > 15:
+                ys, xs = np.where(brown_mask)
+                cx, cy = float(np.median(xs)), float(np.median(ys))
+                hotspots.append({
+                    "id": "pin_lesion",
+                    "type": "lesion",
+                    "label": "Necrotic Lesion / Spore Cluster",
+                    "telugu_label": "తెగులు మచ్చ / కణజాల క్షీణత",
+                    "hindi_label": "सूखा धब्बा / परिगलन (नेक्रोसिस)",
+                    "x": round((cx / 300.0) * 100.0, 1),
+                    "y": round((cy / 300.0) * 100.0, 1),
+                    "color": "#EF4444",
+                    "severity": "High",
+                    "pigment": "Necrotic Brown",
+                    "description": "Pathogen damage: leaf cells have collapsed and dried up into a necrotic lesion.",
+                    "telugu_desc": "శిలీంధ్రం లేదా బ్యాక్టీరియా వల్ల ఆకు కణాలు దెబ్బతిని ఎండిపోయిన ప్రదేశం.",
+                    "hindi_desc": "रोगजनक के कारण कोशिकाएं नष्ट होकर सूखे भूरे धब्बे में बदल गई हैं।"
+                })
+
+            # 2. Chlorosis Yellowing Halo
+            if np.sum(yellow_mask) > 15:
+                ys, xs = np.where(yellow_mask)
+                cx, cy = float(np.median(xs)), float(np.median(ys))
+                hotspots.append({
+                    "id": "pin_chlorosis",
+                    "type": "chlorosis",
+                    "label": "Chlorotic Halo (Yellowing)",
+                    "telugu_label": "పత్రహరితం క్షీణత (పసుపు రంగు)",
+                    "hindi_label": "पीलापन / क्लोरोसिस घेरा",
+                    "x": round((cx / 300.0) * 100.0, 1),
+                    "y": round((cy / 300.0) * 100.0, 1),
+                    "color": "#F59E0B",
+                    "severity": "Moderate",
+                    "pigment": "Chlorotic Yellow",
+                    "description": "Chlorophyll depletion halo surrounding active infection or nutrient stress.",
+                    "telugu_desc": "మచ్చ చుట్టూ పచ్చదనం తగ్గి పసుపు రంగులోకి మారిన పత్రహరిత భాగం.",
+                    "hindi_desc": "संक्रमण के चारों ओर क्लोरोफिल की कमी से बना पीला घेरा।"
+                })
+
+            # 3. Healthy Foliage Tissue
+            if np.sum(healthy_mask) > 40:
+                ys, xs = np.where(healthy_mask)
+                cx, cy = float(np.median(xs)), float(np.median(ys))
+                hotspots.append({
+                    "id": "pin_healthy",
+                    "type": "healthy",
+                    "label": "Healthy Photosynthetic Tissue",
+                    "telugu_label": "ఆరోగ్యకరమైన ఆకుపచ్చ కణజాలం",
+                    "hindi_label": "स्वस्थ हरा ऊतक",
+                    "x": round((cx / 300.0) * 100.0, 1),
+                    "y": round((cy / 300.0) * 100.0, 1),
+                    "color": "#10B981",
+                    "severity": "Optimal",
+                    "pigment": "Chlorophyll Green",
+                    "description": "Uniform chlorophyll concentration actively conducting photosynthesis.",
+                    "telugu_desc": "సహజ పచ్చదనంతో ఆరోగ్యంగా ఉన్న ఆకు భాగం.",
+                    "hindi_desc": "सक्रिय प्रकाश संश्लेषण करने वाला स्वस्थ हरा हिस्सा।"
+                })
+
+            # 4. Spreading Blight Margin (if pale blight spots exist and sufficiently spaced)
+            if np.sum(blight_mask) > 30 and (np.sum(brown_mask) > 10 or np.sum(yellow_mask) > 10):
+                ys, xs = np.where(blight_mask)
+                cx, cy = float(np.median(xs)), float(np.median(ys))
+                dist_ok = True
+                for h_item in hotspots:
+                    dist = ((cx - (h_item["x"] / 100.0) * 300.0)**2 + (cy - (h_item["y"] / 100.0) * 300.0)**2)**0.5
+                    if dist < 40:
+                        dist_ok = False
+                        break
+                if dist_ok:
+                    hotspots.append({
+                        "id": "pin_blight",
+                        "type": "blight_margin",
+                        "label": "Spreading Lesion Margin",
+                        "telugu_label": "వ్యాపిస్తున్న తెగులు అంచు",
+                        "hindi_label": "फैलता हुआ रोग किनारा",
+                        "x": round((cx / 300.0) * 100.0, 1),
+                        "y": round((cy / 300.0) * 100.0, 1),
+                        "color": "#8B5CF6",
+                        "severity": "Active",
+                        "pigment": "Pale Discoloration",
+                        "description": "Active boundary where the lesion is progressing into healthy leaf tissue.",
+                        "telugu_desc": "తెగులు కొత్త ఆకు భాగాల్లోకి పాకుతున్న సరిహద్దు రేఖ.",
+                        "hindi_desc": "धब्बे का सक्रिय बाहरी सिरा जो नए हिस्से में फैल रहा है।"
+                    })
+
             # Construct segmentation visual overlay
             overlay = np_rgb.copy().astype(np.float32)
             # Background dimmed for focus
@@ -251,13 +341,38 @@ class CropDiseaseClassifier:
             overlay_img.save(buf, format="JPEG", quality=88)
             b64_str = base64.b64encode(buf.getvalue()).decode("utf-8")
 
+            # Construct annotated target visual image with drawn callout pins & target rings
+            annotated_img = overlay_img.copy()
+            draw = ImageDraw.Draw(annotated_img)
+            for pin in hotspots:
+                px = int(round((pin["x"] / 100.0) * 300.0))
+                py = int(round((pin["y"] / 100.0) * 300.0))
+                pin_color_rgb = (239, 68, 68) if pin["type"] == "lesion" else (245, 158, 11) if pin["type"] == "chlorosis" else (16, 185, 129) if pin["type"] == "healthy" else (139, 92, 246)
+                
+                # Outer glowing white/color rings
+                draw.ellipse([(px - 14, py - 14), (px + 14, py + 14)], outline=(255, 255, 255), width=2)
+                draw.ellipse([(px - 10, py - 10), (px + 10, py + 10)], outline=pin_color_rgb, width=2)
+                # Inner solid center pin
+                draw.ellipse([(px - 4, py - 4), (px + 4, py + 4)], fill=(255, 255, 255), outline=pin_color_rgb, width=1)
+                # Small crosshair marks
+                draw.line([(px - 18, py), (px - 14, py)], fill=(255, 255, 255), width=2)
+                draw.line([(px + 14, py), (px + 18, py)], fill=(255, 255, 255), width=2)
+                draw.line([(px, py - 18), (px, py - 14)], fill=(255, 255, 255), width=2)
+                draw.line([(px, py + 14), (px, py + 18)], fill=(255, 255, 255), width=2)
+
+            buf_annotated = io.BytesIO()
+            annotated_img.save(buf_annotated, format="JPEG", quality=90)
+            b64_annotated = base64.b64encode(buf_annotated.getvalue()).decode("utf-8")
+
             return {
                 "healthy_percentage": healthy_pct,
                 "lesion_percentage": lesion_pct,
                 "leaf_coverage_ratio": round((total_leaf_pixels / (300 * 300)) * 100.0, 1),
                 "chlorosis_yellow_pct": round((int(np.sum(yellow_mask)) / total_leaf_pixels) * 100.0, 1),
                 "necrosis_brown_pct": round((int(np.sum(brown_mask)) / total_leaf_pixels) * 100.0, 1),
-                "segmentation_mask_url": f"data:image/jpeg;base64,{b64_str}"
+                "segmentation_mask_url": f"data:image/jpeg;base64,{b64_str}",
+                "annotated_mask_url": f"data:image/jpeg;base64,{b64_annotated}",
+                "hotspots": hotspots
             }
         except Exception as e:
             logger.warning(f"HSV segmentation failed: {e}")
@@ -265,7 +380,9 @@ class CropDiseaseClassifier:
                 "healthy_percentage": 90.0,
                 "lesion_percentage": 10.0,
                 "leaf_coverage_ratio": 70.0,
-                "segmentation_mask_url": ""
+                "segmentation_mask_url": "",
+                "annotated_mask_url": "",
+                "hotspots": []
             }
 
     def preprocess(self, img: Image.Image) -> np.ndarray:
