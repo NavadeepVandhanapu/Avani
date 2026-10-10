@@ -9,7 +9,8 @@ import {
   Info, 
   Leaf, 
   ShieldAlert,
-  Globe
+  Globe,
+  Mic
 } from 'lucide-react';
 import type { Language, PredictionResponse } from '../types';
 import { TRANSLATIONS } from '../translations';
@@ -22,6 +23,7 @@ interface PredictionResultProps {
   previewUrl: string;
   onProceedToQuestions: () => void;
   onScanAnother: () => void;
+  onOpenVoiceAssistant?: () => void;
 }
 
 export const PredictionResult: React.FC<PredictionResultProps> = ({
@@ -30,18 +32,21 @@ export const PredictionResult: React.FC<PredictionResultProps> = ({
   prediction,
   previewUrl,
   onProceedToQuestions,
-  onScanAnother
+  onScanAnother,
+  onOpenVoiceAssistant
 }) => {
   const t = TRANSLATIONS[currentLang];
 
   const isInvalid = !prediction.is_leaf_detected || prediction.predicted_class === 'Invalid___Non_Leaf';
-  const isHealthy = prediction.is_healthy;
-  const isUncertain = prediction.is_uncertain && !isInvalid;
+  const isUncertain = Boolean(prediction.is_uncertain && !isInvalid);
+  const isHealthy = Boolean(prediction.is_healthy && !isUncertain && !isInvalid);
 
   const handleReadResult = () => {
     let speechText = '';
     if (isInvalid) {
       speechText = t.non_leaf_warning;
+    } else if (isUncertain) {
+      speechText = `${t.uncertain_warning_title}. ${prediction.plain_explanation}`;
     } else if (isHealthy) {
       speechText = `${prediction.crop}. ${t.healthy_status_badge}. ${t.healthy_explanation_default}`;
     } else {
@@ -140,15 +145,15 @@ export const PredictionResult: React.FC<PredictionResultProps> = ({
                 
                 {/* Status Indicator Badge */}
                 <div className="mb-2.5">
-                  {isHealthy ? (
-                    <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-secondary/15 text-primary border border-secondary/30 shadow-subtle">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-secondary" />
-                      <span>{t.healthy_status_badge}</span>
-                    </span>
-                  ) : isUncertain ? (
+                  {isUncertain ? (
                     <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-alert-light text-alert border border-alert/30 shadow-subtle">
                       <HelpCircle className="w-3.5 h-3.5 text-alert" />
                       <span>{t.uncertain_status_badge}</span>
+                    </span>
+                  ) : isHealthy ? (
+                    <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-secondary/15 text-primary border border-secondary/30 shadow-subtle">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-secondary" />
+                      <span>{t.healthy_status_badge}</span>
                     </span>
                   ) : (
                     <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-danger-light text-danger border border-danger/30 shadow-subtle">
@@ -158,13 +163,22 @@ export const PredictionResult: React.FC<PredictionResultProps> = ({
                   )}
                 </div>
 
-                {/* Primary Common Crop & Condition Name */}
+                {/* Primary Common Crop & Condition Name (or Inconclusive Observation when uncertain) */}
                 <h3 className="text-xl sm:text-2xl font-bold text-primary font-sans">
-                  {prediction.crop} — {prediction.condition}
+                  {isUncertain ? t.uncertain_primary_heading : `${prediction.crop} — ${prediction.condition}`}
                 </h3>
+
+                {/* Tentative Possibility Banner when Uncertain */}
+                {isUncertain && (
+                  <div className="mt-2 p-2.5 rounded-lg bg-ivory border border-warmborder text-xs">
+                    <span className="font-bold text-charcoal">{t.tentative_resemblance_label}: </span>
+                    <span className="text-primary font-semibold">{prediction.crop} — {prediction.condition}</span>
+                    <span className="text-muted ml-1.5 font-normal">{t.low_certainty_note || "(Low certainty observation)"}</span>
+                  </div>
+                )}
                 
-                {/* Scientific Name as Subtle Secondary Info */}
-                {prediction.scientific_name && (
+                {/* Scientific Name as Subtle Secondary Info (only for confirmed diagnosis) */}
+                {!isUncertain && prediction.scientific_name && (
                   <p className="text-[11px] text-muted mt-0.5">
                     <span className="font-medium">{t.scientific_name_label}:</span> <span className="italic">{prediction.scientific_name}</span>
                   </p>
@@ -172,14 +186,14 @@ export const PredictionResult: React.FC<PredictionResultProps> = ({
 
                 {/* Plain-Language Explanation */}
                 <p className="text-xs sm:text-sm text-charcoal mt-2.5 leading-relaxed">
-                  {isHealthy ? t.healthy_explanation_default : prediction.plain_explanation}
+                  {isUncertain ? prediction.plain_explanation : isHealthy ? t.healthy_explanation_default : prediction.plain_explanation}
                 </p>
 
                 {/* "How sure is this result?" Genuine Model Confidence */}
                 <div className="mt-3.5 pt-2.5 border-t border-warmborder/60 flex flex-wrap items-center justify-center sm:justify-start gap-2 text-xs">
                   <span className="font-semibold text-charcoal">{t.confidence_question}</span>
                   <span className="px-2.5 py-1 rounded bg-ivory border border-warmborder text-secondary-dark font-medium">
-                    {prediction.plain_confidence} ({Math.round(prediction.confidence * 100)}%)
+                    {prediction.plain_confidence}
                   </span>
                 </div>
 
@@ -187,12 +201,12 @@ export const PredictionResult: React.FC<PredictionResultProps> = ({
 
             </div>
 
-            {/* "What to look for" Signs Box */}
+            {/* Observable Damage / What to look for Signs Box */}
             {prediction.visible_symptoms_reference && prediction.visible_symptoms_reference.length > 0 && (
               <div className="mt-5 p-4 rounded-natural bg-ivory/70 border border-warmborder/80">
                 <h4 className="text-xs sm:text-sm font-bold text-charcoal flex items-center space-x-1.5 mb-2.5">
                   <Leaf className="w-4 h-4 text-secondary" />
-                  <span>{t.what_to_look_for}:</span>
+                  <span>{isUncertain ? t.observable_damage_heading : t.what_to_look_for}:</span>
                 </h4>
                 <ul className="space-y-2 text-xs text-charcoal-muted">
                   {prediction.visible_symptoms_reference.map((sign, idx) => (
@@ -224,13 +238,26 @@ export const PredictionResult: React.FC<PredictionResultProps> = ({
             {/* Obvious Next Actions */}
             <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-warmborder">
               
-              <button
-                onClick={onScanAnother}
-                className="w-full sm:w-auto px-5 py-3 rounded-natural bg-ivory hover:bg-ivory-dark text-charcoal font-medium text-xs sm:text-sm border border-warmborder transition-colors flex items-center justify-center space-x-2 cursor-pointer"
-              >
-                <RotateCcw className="w-4 h-4 text-muted" />
-                <span>{t.scan_another_action}</span>
-              </button>
+              <div className="flex items-center space-x-2 w-full sm:w-auto">
+                <button
+                  onClick={onScanAnother}
+                  className="flex-1 sm:flex-initial px-4 py-3 rounded-natural bg-ivory hover:bg-ivory-dark text-charcoal font-medium text-xs sm:text-sm border border-warmborder transition-colors flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4 text-muted" />
+                  <span>{t.scan_another_action}</span>
+                </button>
+
+                {onOpenVoiceAssistant && (
+                  <button
+                    onClick={onOpenVoiceAssistant}
+                    className="flex-1 sm:flex-initial px-4 py-3 rounded-natural bg-secondary/15 hover:bg-secondary/25 text-secondary-dark font-medium text-xs sm:text-sm border border-secondary/30 transition-colors flex items-center justify-center space-x-2 cursor-pointer shadow-subtle"
+                    title={t.voice_assistant_btn || "Voice Assistant"}
+                  >
+                    <Mic className="w-4 h-4 text-secondary-dark" />
+                    <span>{t.voice_assistant_btn || "Voice Assistant"}</span>
+                  </button>
+                )}
+              </div>
 
               <button
                 onClick={onProceedToQuestions}

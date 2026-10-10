@@ -99,3 +99,15 @@ export interface SavedScan {
   follow_up_answers?: FollowUpAnswers;
   guidance_summary?: ActionPlanResponse;
 }
+
+export interface VoiceQueryResponse {
+  success: boolean;
+  query: string;
+  language: Language;
+  matched_crop: string;
+  condition: string;
+  answer_text: string;
+  action_pointers: string[];
+  is_scan_context_applied: boolean;
+}
+

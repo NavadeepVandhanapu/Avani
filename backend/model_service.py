@@ -182,7 +182,7 @@ class CropDiseaseClassifier:
         }
 
         # Check for blank / uniform color
-        if std_dev < 7.0:
+        if std_dev < 4.0 or (std_dev < 7.0 and plant_pixel_ratio < 0.30):
             return False, "The image appears blank or lacks detail.", metrics
 
         # Non-foliage rejection
@@ -355,7 +355,6 @@ class CropDiseaseClassifier:
             top_class, top_conf, top_3 = self.run_calibrated_cv_fallback(img, metrics)
 
         # 3. Apply Strict Uncertainty Safeguards
-        # If top probability is below 0.48, or difference between top 1 and top 2 is < 0.08 when confidence < 0.60:
         is_uncertain = False
         uncertainty_reason = ""
 
@@ -365,6 +364,9 @@ class CropDiseaseClassifier:
         elif len(top_3) > 1 and (top_3[0]["confidence"] - top_3[1]["confidence"]) < 0.08 and top_conf < 0.60:
             is_uncertain = True
             uncertainty_reason = f"Ambiguous top candidates gap ({top_3[0]['confidence'] - top_3[1]['confidence']:.2f})"
+        elif len(top_3) > 1 and top_3[0]["crop"] != top_3[1]["crop"] and top_conf < 0.65:
+            is_uncertain = True
+            uncertainty_reason = f"Conflicting crop species in top candidates ({top_3[0]['crop']} vs {top_3[1]['crop']}) with score ({top_conf*100:.1f}% < 65%)"
 
         if is_uncertain:
             logger.info(f"Uncertainty safeguard triggered: {uncertainty_reason}")
@@ -376,30 +378,44 @@ class CropDiseaseClassifier:
             "is_healthy": "healthy" in top_class.lower()
         })
 
+        # Determine whether uncertainty is due to crop species, disease condition, or general distribution
+        species_in_top3 = list({cand["crop"] for cand in top_3})
+        is_species_ambiguous = len(species_in_top3) > 1 and top_conf < 0.55
+
         # CRITICAL SAFEGUARD: Never label a low-confidence or uncertain leaf as healthy!
         if is_uncertain and meta["is_healthy"]:
             meta["is_healthy"] = False
             top_class = "Uncertain___Low_Confidence"
             meta["crop"] = "General Crop"
             meta["condition"] = "Inconclusive Observation"
-            plain_explanation = "We couldn't identify this leaf reliably. The photo may be slightly blurred or symptoms are in early stages. Please answer our quick field questions to tailor next steps."
+            if is_species_ambiguous:
+                plain_explanation = "The leaf details are visible, but the plant species is outside our high-confidence recognition library. Please select your crop or answer a few quick questions to help us provide accurate next steps."
+            else:
+                plain_explanation = "The leaf is visibly detailed, but we cannot confirm the crop or condition with high certainty. Please answer our quick field questions or select your crop to tailor practical guidance."
         elif is_uncertain:
-            plain_explanation = f"Visual signs may resemble {meta['condition']} on {meta['crop']}, but confidence is low. Please answer our quick field questions to tailor practical next steps."
+            if is_species_ambiguous:
+                plain_explanation = f"Visual features might resemble {meta['condition']} on {meta['crop']}, but the plant species cannot be confirmed reliably from this single photo. Please select your crop to refine the analysis."
+            else:
+                plain_explanation = f"The crop appears to be {meta['crop']}, but visual signs are in early stages or resemble multiple conditions. Please answer our quick field questions to tailor practical next steps."
         elif meta["is_healthy"]:
-            plain_explanation = f"The leaf in this photo appears healthy with normal green pigmentation. No obvious signs of leaf disease were seen."
+            plain_explanation = "The leaf in this photo appears healthy with normal green pigmentation. No obvious signs of leaf disease were seen."
         else:
             plain_explanation = f"Visual patterns in this photograph strongly resemble {meta['condition']} on {meta['crop']}."
 
-        # Plain confidence text
-        if top_conf >= 0.75:
-            confidence_level = "High"
-            plain_confidence = f"High visual match ({int(round(top_conf * 100))}%)"
-        elif top_conf >= 0.50:
-            confidence_level = "Moderate"
-            plain_confidence = f"Moderate visual match ({int(round(top_conf * 100))}%) — verify with field inspection"
-        else:
+        # Plain confidence text (single percentage, farmer-friendly wording, not claiming diagnostic certainty)
+        score_pct = int(round(top_conf * 100))
+        if is_uncertain or top_conf < 0.48:
             confidence_level = "Low"
-            plain_confidence = f"Low visual certainty ({int(round(top_conf * 100))}%) — follow-up questions recommended"
+            plain_confidence = f"We're not sure what is affecting this leaf ({score_pct}% visual similarity) — please confirm crop"
+        elif top_conf >= 0.75:
+            confidence_level = "High"
+            if meta["is_healthy"]:
+                plain_confidence = f"The photo looks similar to healthy foliage ({score_pct}% visual similarity)"
+            else:
+                plain_confidence = f"The photo looks similar to this disease ({score_pct}% visual similarity)"
+        else:
+            confidence_level = "Moderate"
+            plain_confidence = f"The photo looks somewhat similar to this condition ({score_pct}% visual similarity) — verify in field"
 
         return {
             "success": True,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Camera, History, CloudSun, Globe } from 'lucide-react';
+import { Camera, History, CloudSun, Globe, Mic } from 'lucide-react';
 import type { Language, WeatherData } from '../types';
 import { TRANSLATIONS } from '../translations';
 
@@ -9,6 +9,7 @@ interface WelcomeHeroProps {
   onStartScan: () => void;
   onOpenHistory: () => void;
   onOpenWeather: () => void;
+  onOpenVoiceAssistant?: () => void;
   scanCount: number;
   weatherData?: WeatherData | null;
 }
@@ -19,6 +20,7 @@ export const WelcomeHero: React.FC<WelcomeHeroProps> = ({
   onStartScan,
   onOpenHistory,
   onOpenWeather,
+  onOpenVoiceAssistant,
   scanCount,
   weatherData
 }) => {
@@ -134,8 +136,8 @@ export const WelcomeHero: React.FC<WelcomeHeroProps> = ({
           </p>
         </div>
 
-        {/* Large Primary Action */}
-        <div className="mb-6">
+        {/* Large Primary Action & Voice Option */}
+        <div className="space-y-3 mb-6">
           <button
             onClick={onStartScan}
             className="w-full py-4 px-6 rounded-natural bg-primary hover:bg-primary-dark active:scale-[0.99] text-cream font-bold text-base sm:text-lg shadow-elevated flex items-center justify-center space-x-3 transition-all cursor-pointer"
@@ -144,6 +146,19 @@ export const WelcomeHero: React.FC<WelcomeHeroProps> = ({
             <Camera className="w-6 h-6 text-cream flex-shrink-0" />
             <span>{t.check_my_crop}</span>
           </button>
+
+          {onOpenVoiceAssistant && (
+            <button
+              onClick={onOpenVoiceAssistant}
+              className="w-full py-3 px-4 rounded-natural bg-secondary/15 hover:bg-secondary/25 border border-secondary/30 text-secondary-dark font-semibold text-sm flex items-center justify-center space-x-2.5 transition-all cursor-pointer shadow-subtle"
+              id="voice-assistant-hero-btn"
+            >
+              <div className="w-6 h-6 rounded-full bg-secondary text-cream flex items-center justify-center flex-shrink-0">
+                <Mic className="w-3.5 h-3.5" />
+              </div>
+              <span>{t.voice_assistant_title} ({currentLang === 'en' ? 'Ask by Voice' : currentLang === 'te' ? 'నోటితో అడగండి' : 'बोलकर पूछें'})</span>
+            </button>
+          )}
         </div>
 
         {/* Secondary Actions (Clean & Accessible) */}

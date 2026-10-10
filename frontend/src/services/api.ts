@@ -11,9 +11,10 @@ export async function checkBackendHealth() {
   }
 }
 
-export async function predictCropLeaf(fileOrBlob: File | Blob): Promise<PredictionResponse> {
+export async function predictCropLeaf(fileOrBlob: File | Blob, language: string = 'en'): Promise<PredictionResponse> {
   const formData = new FormData();
   formData.append('file', fileOrBlob, 'leaf_photo.jpg');
+  formData.append('language', language);
 
   const res = await fetch(`${API_BASE}/predict`, {
     method: 'POST',
@@ -32,7 +33,8 @@ export async function fetchActionGuidance(
   predictedClass: string,
   confidence: number,
   isHealthy: boolean,
-  followUpAnswers: FollowUpAnswers
+  followUpAnswers: FollowUpAnswers,
+  language: string = 'en'
 ): Promise<ActionPlanResponse> {
   const res = await fetch(`${API_BASE}/guidance`, {
     method: 'POST',
@@ -42,6 +44,7 @@ export async function fetchActionGuidance(
       confidence: confidence,
       is_healthy: isHealthy,
       follow_up_answers: followUpAnswers,
+      language: language,
     }),
   });
 
@@ -97,3 +100,43 @@ export async function fetchWeatherData(location?: string): Promise<WeatherData> 
   }
   return await res.json();
 }
+
+export async function fetchVoiceQueryAnswer(
+  query: string,
+  language: string,
+  scanContext?: any
+) {
+  const res = await fetch(`${API_BASE}/voice-query`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: query,
+      language: language,
+      scan_context: scanContext || null
+    })
+  });
+
+  if (!res.ok) {
+    throw new Error('Failed to process voice query.');
+  }
+
+  return await res.json();
+}
+
+export async function fetchTTSAudio(text: string, language: string): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text: text,
+      language: language,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error('Failed to generate audio from backend TTS');
+  }
+
+  return await res.blob();
+}
+

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Eye, 
   ShieldCheck, 
@@ -36,6 +36,11 @@ export const ActionSupportPlan: React.FC<ActionSupportPlanProps> = ({
   const [tasks, setTasks] = useState<TimelineActionItem[]>(plan.timeline_actions || []);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
 
+  // Sync tasks when plan changes (e.g. language toggle or new scan)
+  useEffect(() => {
+    setTasks(plan.timeline_actions || []);
+  }, [plan]);
+
   const toggleTask = (id: string) => {
     setTasks(prev => prev.map(item => 
       item.id === id ? { ...item, completed: !item.completed } : item
@@ -53,7 +58,14 @@ export const ActionSupportPlan: React.FC<ActionSupportPlanProps> = ({
     const monitorText = plan.what_to_monitor.join('. ');
     const seekHelpText = plan.when_to_seek_help.join('. ');
     
-    const speech = `Action plan for ${plan.crop}, ${plan.condition}. First, What to check now: ${checkNowText}. Second, What to monitor: ${monitorText}. Third, When to seek help: ${seekHelpText}.`;
+    let speech = '';
+    if (currentLang === 'te') {
+      speech = `${plan.crop} - ${plan.condition} కార్యాచరణ ప్రణాళిక. 1. ఇప్పుడు ఏం పరిశీలించాలి: ${checkNowText}. 2. ఏమి గమనించాలి: ${monitorText}. 3. వ్యవసాయ అధికారిని ఎప్పుడు సంప్రదించాలి: ${seekHelpText}.`;
+    } else if (currentLang === 'hi') {
+      speech = `${plan.crop} - ${plan.condition} कार्य योजना। 1. अभी क्या जांचें: ${checkNowText}। 2. क्या निगरानी करें: ${monitorText}। 3. विशेषज्ञ से कब संपर्क करें: ${seekHelpText}।`;
+    } else {
+      speech = `Action plan for ${plan.crop}, ${plan.condition}. First, What to check now: ${checkNowText}. Second, What to monitor: ${monitorText}. Third, When to seek help: ${seekHelpText}.`;
+    }
     
     setIsAudioPlaying(true);
     SpeechAssistant.speak(speech, currentLang, () => {
@@ -71,7 +83,7 @@ export const ActionSupportPlan: React.FC<ActionSupportPlanProps> = ({
         <div>
           <div className="inline-flex items-center space-x-1.5 text-xs font-semibold text-primary px-2.5 py-0.5 rounded-full bg-secondary/15 border border-secondary/20 mb-1.5">
             <FileCheck2 className="w-3.5 h-3.5 text-secondary-dark" />
-            <span>Factual Agricultural Action Plan</span>
+            <span>{t.plan_badge || "Factual Agricultural Action Plan"}</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-bold text-primary font-sans">
             {t.plan_heading}
@@ -86,7 +98,7 @@ export const ActionSupportPlan: React.FC<ActionSupportPlanProps> = ({
           
           <button
             onClick={handleReadFullPlan}
-            className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-natural border text-xs font-semibold shadow-subtle transition-all ${
+            className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-natural border text-xs font-semibold shadow-subtle transition-all cursor-pointer ${
               isAudioPlaying 
                 ? 'bg-primary text-cream border-primary animate-pulse' 
                 : 'bg-cream border-warmborder hover:bg-ivory text-charcoal'
@@ -100,7 +112,7 @@ export const ActionSupportPlan: React.FC<ActionSupportPlanProps> = ({
           <button
             onClick={onSaveScan}
             disabled={isSaved}
-            className={`flex items-center space-x-1.5 px-4 py-2 rounded-natural text-xs font-semibold shadow-subtle transition-all ${
+            className={`flex items-center space-x-1.5 px-4 py-2 rounded-natural text-xs font-semibold shadow-subtle transition-all cursor-pointer ${
               isSaved 
                 ? 'bg-secondary/20 text-secondary-dark border border-secondary/30 cursor-default' 
                 : 'bg-primary hover:bg-primary-dark text-cream'
@@ -133,7 +145,7 @@ export const ActionSupportPlan: React.FC<ActionSupportPlanProps> = ({
             <h3 className="text-base sm:text-lg font-bold text-primary font-sans">
               {t.check_now_heading}
             </h3>
-            <p className="text-xs text-muted">Immediate physical inspection steps on foliage and soil</p>
+            <p className="text-xs text-muted">{t.check_now_subtitle || "Immediate physical inspection steps on foliage and soil"}</p>
           </div>
         </div>
 
@@ -159,7 +171,7 @@ export const ActionSupportPlan: React.FC<ActionSupportPlanProps> = ({
             <h3 className="text-base sm:text-lg font-bold text-primary font-sans">
               {t.monitor_heading}
             </h3>
-            <p className="text-xs text-muted">Observation indicators for symptom expansion over next 2 to 5 days</p>
+            <p className="text-xs text-muted">{t.monitor_subtitle || "Observation indicators for symptom expansion over next 2 to 5 days"}</p>
           </div>
         </div>
 
@@ -183,7 +195,7 @@ export const ActionSupportPlan: React.FC<ActionSupportPlanProps> = ({
             <h3 className="text-base sm:text-lg font-bold text-primary font-sans">
               {t.seek_help_heading}
             </h3>
-            <p className="text-xs text-muted">Thresholds for escalating to local agricultural extension (KVK)</p>
+            <p className="text-xs text-muted">{t.seek_help_subtitle || "Thresholds for escalating to local agricultural extension (KVK)"}</p>
           </div>
         </div>
 
@@ -207,7 +219,7 @@ export const ActionSupportPlan: React.FC<ActionSupportPlanProps> = ({
             </h3>
           </div>
           <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-ivory border border-warmborder text-secondary-dark">
-            {completedCount} / {tasks.length} Completed
+            {completedCount} / {tasks.length} {t.completed_label || "Completed"}
           </span>
         </div>
 
@@ -253,14 +265,14 @@ export const ActionSupportPlan: React.FC<ActionSupportPlanProps> = ({
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-warmborder">
         <button
           onClick={onScanAnother}
-          className="w-full sm:w-auto px-6 py-3.5 rounded-natural bg-primary hover:bg-primary-dark text-cream font-bold text-sm shadow-subtle flex items-center justify-center space-x-2"
+          className="w-full sm:w-auto px-6 py-3.5 rounded-natural bg-primary hover:bg-primary-dark text-cream font-bold text-sm shadow-subtle flex items-center justify-center space-x-2 cursor-pointer"
         >
           <RotateCcw className="w-4 h-4" />
           <span>{t.scan_another_action}</span>
         </button>
 
         <span className="text-xs text-muted">
-          Avani Crop Health Intelligence • Grounded in Agricultural Standards
+          {t.footer_tagline || "Avani Crop Health Intelligence • Grounded in Agricultural Standards"}
         </span>
       </div>
 
