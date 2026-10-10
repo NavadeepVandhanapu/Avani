@@ -8,13 +8,16 @@ import {
   SwitchCamera, 
   VideoOff, 
   Check, 
-  Layers
+  Layers,
+  Smartphone,
+  Loader2
 } from 'lucide-react';
 import type { Language } from '../types';
 import { TRANSLATIONS } from '../translations';
 
 interface LeafScannerProps {
   currentLang: Language;
+  autoStartCamera?: boolean;
   onAnalyze: (fileOrBlob: File | Blob, previewUrl: string) => void;
   onCancel: () => void;
 }
@@ -47,7 +50,7 @@ const REAL_DATASET_SAMPLES: BenchmarkSample[] = [
   },
   {
     id: 'potato_late',
-    name: { en: 'Late Blight', te: 'లేట్ బ్లైట్', hi: 'पछेती झुलसा' },
+    name: { en: 'Late Blight', te: 'లేట్ బ్లైట్', hi: 'పచేతీ झुलसा' },
     crop: { en: 'Potato', te: 'బంగాళాదుంప', hi: 'आलू' },
     imgUrl: '/samples/potato_late_blight.jpg',
     isHealthy: false,
@@ -81,6 +84,7 @@ const REAL_DATASET_SAMPLES: BenchmarkSample[] = [
 
 export const LeafScanner: React.FC<LeafScannerProps> = ({
   currentLang,
+  autoStartCamera = false,
   onAnalyze,
   onCancel
 }) => {
@@ -90,38 +94,51 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isStartingCamera, setIsStartingCamera] = useState(false);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isLoadingSample, setIsLoadingSample] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const nativeCameraInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  const attachStreamToVideo = (el: HTMLVideoElement | null, stream: MediaStream | null) => {
+    if (!el || !stream) return;
+    try {
+      el.muted = true;
+      el.playsInline = true;
+      el.srcObject = stream;
+      el.onloadedmetadata = () => {
+        el.play().catch(e => console.warn('Video play error on loadedmetadata:', e));
+      };
+      el.play().catch(e => console.warn('Direct video play error:', e));
+    } catch (e) {
+      console.warn('Error attaching stream:', e);
+    }
+  };
 
   const setVideoRef = (el: HTMLVideoElement | null) => {
     videoRef.current = el;
     if (el && streamRef.current) {
-      if (el.srcObject !== streamRef.current) {
-        el.srcObject = streamRef.current;
-      }
-      el.play().catch(e => console.warn('Video play error on ref mount:', e));
+      attachStreamToVideo(el, streamRef.current);
     }
   };
 
   useEffect(() => {
-    // Camera is OFF by default unless user explicitly clicks Turn ON Camera
+    if (autoStartCamera) {
+      startCamera();
+    }
     return () => {
       stopCamera();
     };
-  }, []);
+  }, [autoStartCamera]);
 
   useEffect(() => {
     if (isCameraActive && videoRef.current && streamRef.current) {
-      if (videoRef.current.srcObject !== streamRef.current) {
-        videoRef.current.srcObject = streamRef.current;
-      }
-      videoRef.current.play().catch(e => console.warn('Video play error on state active:', e));
+      attachStreamToVideo(videoRef.current, streamRef.current);
     }
   }, [isCameraActive]);
 
@@ -134,6 +151,7 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
 
   const validateAndSetImage = (file: File | Blob) => {
     setValidationError(null);
+    setCameraError(null);
     
     if (file.type && !file.type.startsWith('image/')) {
       setValidationError('Please select an image file (JPG, PNG, or WebP).');
@@ -154,12 +172,26 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
   const startCamera = async (overrideFacing?: 'environment' | 'user') => {
     setCameraError(null);
     setValidationError(null);
+    setIsStartingCamera(true);
     stopCamera();
 
     const targetFacing = overrideFacing || facingMode;
 
+    if (!navigator || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setIsStartingCamera(false);
+      setCameraError(
+        currentLang === 'te'
+          ? 'ఈ బ్రౌజర్‌లో లైవ్ వెబ్‌క్యామ్ సపోర్ట్ లేదు (HTTPS లేదా localhost అవసరం). దయచేసి క్రింది "డివైజ్ కెమెరా ఫోటో" ఉపయోగించండి.'
+          : currentLang === 'hi'
+          ? 'इस ब्राउज़र में लाइव वेबकैम उपलब्ध नहीं है (HTTPS या localhost आवश्यक है)। कृपया नीचे दिए गए "डिवाइस कैमरा" का उपयोग करें।'
+          : 'Live webcam is unavailable in this browser context (HTTPS or localhost is required). Please tap "Take Photo with Device Camera" below.'
+      );
+      return;
+    }
+
     try {
-      let stream: MediaStream;
+      let stream: MediaStream | null = null;
+      // Tier 1: Target facing with ideal 720p
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { 
@@ -170,23 +202,51 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
           audio: false
         });
       } catch (firstErr) {
-        console.warn('Ideal camera constraint failed, falling back to simple video: true', firstErr);
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        console.warn('Tier 1 camera constraints failed, attempting Tier 2:', firstErr);
+        // Tier 2: Target facing without size constraints
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: targetFacing },
+            audio: false
+          });
+        } catch (secondErr) {
+          console.warn('Tier 2 camera constraints failed, attempting generic video:', secondErr);
+          // Tier 3: Standard webcam fallback (desktop / laptop)
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
+      }
+
+      if (!stream) {
+        throw new Error('No media stream available');
       }
 
       streamRef.current = stream;
       setIsCameraActive(true);
       setFacingMode(targetFacing);
 
-      // Attach immediately if videoRef is already mounted
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(e => console.warn('Video play error:', e));
+        attachStreamToVideo(videoRef.current, stream);
       }
     } catch (err: any) {
       console.warn('Camera access denied or unavailable:', err);
-      setCameraError('Camera access was not granted or is unavailable on this device. Please grant camera permission in your browser or select a photo from device.');
+      let errorMsg = 'Camera access was not granted or is unavailable. Please check your browser address bar permissions (click the lock 🔒 icon) or use "Device Camera" below.';
+      if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+        errorMsg = currentLang === 'te'
+          ? 'కెమెరా అనుమతి నిరాకరించబడింది. దయచేసి బ్రౌజర్ అడ్రస్ బార్‌లోని లాక్ 🔒 గుర్తును నొక్కి కెమెరాను అనుమతించండి లేదా క్రింది "డివైజ్ కెమెరా" బటన్ నొక్కండి.'
+          : currentLang === 'hi'
+          ? 'कैमरा अनुमति अस्वीकृत हुई। कृपया एड्रेस बार में लॉक 🔒 आइकन पर क्लिक करके अनुमति दें, या नीचे "डिवाइस कैमरा" चुनें।'
+          : 'Camera permission denied. Please allow camera access via the lock 🔒 icon in your browser address bar, or use "Take Photo with Device Camera" below.';
+      } else if (err?.name === 'NotReadableError' || err?.name === 'TrackStartError') {
+        errorMsg = currentLang === 'te'
+          ? 'కెమెరాను వేరొక అప్లికేషన్ (Zoom/Teams) వాడుతోంది లేదా హార్డ్‌వేర్ బిజీగా ఉంది. దయచేసి ఇతర యాప్‌లను క్లోజ్ చేసి మళ్లీ ప్రయత్నించండి.'
+          : currentLang === 'hi'
+          ? 'कैमरा किसी अन्य ऐप (Zoom/Teams) द्वारा उपयोग में है। कृपया अन्य ऐप बंद करें और पुनः प्रयास करें।'
+          : 'Camera is currently in use by another application or busy. Please close other camera apps and retry.';
+      }
+      setCameraError(errorMsg);
       setIsCameraActive(false);
+    } finally {
+      setIsStartingCamera(false);
     }
   };
 
@@ -334,9 +394,31 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
         
         {/* Error Notification */}
         {(validationError || cameraError) && (
-          <div className="mb-4 p-3.5 rounded-natural bg-danger-light border border-danger/20 text-danger text-xs sm:text-sm flex items-start space-x-2">
-            <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-            <span>{validationError || cameraError}</span>
+          <div className="mb-4 p-4 rounded-natural bg-danger-light border border-danger/30 text-danger text-xs sm:text-sm">
+            <div className="flex items-start space-x-2">
+              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span className="leading-relaxed">{validationError || cameraError}</span>
+            </div>
+            {cameraError && (
+              <div className="mt-3 flex flex-wrap gap-2 pt-2 border-t border-danger/20">
+                <button
+                  type="button"
+                  onClick={() => nativeCameraInputRef.current?.click()}
+                  className="px-3 py-1.5 rounded-lg bg-primary text-cream hover:bg-primary-dark font-bold text-xs flex items-center space-x-1.5 shadow-xs cursor-pointer"
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span>📱 Snap Photo with Device Camera</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3 py-1.5 rounded-lg bg-ivory border border-warmborder hover:bg-white text-charcoal font-medium text-xs flex items-center space-x-1.5 cursor-pointer"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>📂 Choose Photo from Files</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -425,49 +507,83 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
 
         {/* Upload Buttons & Drop Area */}
         {!isCameraActive && !previewUrl && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
             
-            {/* Option 1: Live Camera Button */}
+            {/* Option 1: Live Web Camera Button */}
             <button
               type="button"
+              disabled={isStartingCamera}
               onClick={() => startCamera()}
-              className="p-6 rounded-natural border-2 border-primary/40 hover:border-primary bg-primary/5 hover:bg-primary/10 text-center flex flex-col items-center justify-center transition-all cursor-pointer group shadow-subtle"
+              className="p-5 rounded-natural border-2 border-primary/40 hover:border-primary bg-primary/5 hover:bg-primary/10 text-center flex flex-col items-center justify-center transition-all cursor-pointer group shadow-subtle disabled:opacity-50"
               id="turn-on-camera-btn"
             >
-              <div className="w-14 h-14 rounded-2xl bg-primary text-cream flex items-center justify-center mb-3 group-hover:scale-105 transition-transform shadow-subtle">
-                <Camera className="w-7 h-7 text-cream" />
+              <div className="w-12 h-12 rounded-2xl bg-primary text-cream flex items-center justify-center mb-2.5 group-hover:scale-105 transition-transform shadow-subtle">
+                {isStartingCamera ? (
+                  <Loader2 className="w-6 h-6 text-cream animate-spin" />
+                ) : (
+                  <Camera className="w-6 h-6 text-cream" />
+                )}
               </div>
-              <h3 className="text-base font-bold text-primary">
-                📷 Turn ON Live Camera
+              <h3 className="text-sm font-bold text-primary">
+                {isStartingCamera ? 'Connecting Camera...' : '📷 Turn ON Live Camera'}
               </h3>
-              <p className="text-xs text-muted mt-1 max-w-xs">
-                Snap leaf photo directly in field with your device camera
+              <p className="text-[11px] text-muted mt-1 leading-snug">
+                Continuous real-time view in browser
               </p>
             </button>
 
-            {/* Option 2: Upload File / Gallery */}
+            {/* Option 2: Native Device Camera Button */}
+            <button
+              type="button"
+              onClick={() => nativeCameraInputRef.current?.click()}
+              className="p-5 rounded-natural border-2 border-emerald-600/40 hover:border-emerald-600 bg-emerald-50/60 hover:bg-emerald-50 text-center flex flex-col items-center justify-center transition-all cursor-pointer group shadow-subtle"
+              id="open-device-camera-btn"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-emerald-700 text-cream flex items-center justify-center mb-2.5 group-hover:scale-105 transition-transform shadow-subtle">
+                <Smartphone className="w-6 h-6 text-cream" />
+              </div>
+              <h3 className="text-sm font-bold text-emerald-900">
+                📱 Device Camera Photo
+              </h3>
+              <p className="text-[11px] text-muted mt-1 leading-snug">
+                Opens phone or system camera app directly
+              </p>
+            </button>
+
+            {/* Option 3: Upload File / Gallery */}
             <div 
               onClick={() => fileInputRef.current?.click()}
-              className="p-6 rounded-natural border-2 border-dashed border-warmborder-dark/60 hover:border-secondary-dark bg-ivory/50 hover:bg-ivory text-center flex flex-col items-center justify-center transition-all cursor-pointer group"
+              className="p-5 rounded-natural border-2 border-dashed border-warmborder-dark/60 hover:border-secondary-dark bg-ivory/50 hover:bg-ivory text-center flex flex-col items-center justify-center transition-all cursor-pointer group shadow-subtle"
             >
-              <div className="w-14 h-14 rounded-2xl bg-secondary/20 text-secondary-dark flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
-                <Upload className="w-7 h-7 text-secondary-dark" />
+              <div className="w-12 h-12 rounded-2xl bg-secondary/20 text-secondary-dark flex items-center justify-center mb-2.5 group-hover:scale-105 transition-transform">
+                <Upload className="w-6 h-6 text-secondary-dark" />
               </div>
-              <h3 className="text-base font-bold text-charcoal">
+              <h3 className="text-sm font-bold text-charcoal">
                 📂 Upload Leaf Image
               </h3>
-              <p className="text-xs text-muted mt-1 max-w-xs">
-                Select JPG, PNG, or WebP photo from device files
+              <p className="text-[11px] text-muted mt-1 leading-snug">
+                Select JPG, PNG, or WebP photo from device
               </p>
             </div>
 
           </div>
         )}
 
+        {/* Hidden File Input for Device Files */}
         <input
           ref={fileInputRef}
           type="file"
           accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+
+        {/* Hidden Camera Input for Native Device Camera */}
+        <input
+          ref={nativeCameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
           className="hidden"
           onChange={handleFileChange}
         />

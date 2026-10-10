@@ -42,6 +42,7 @@ export const App: React.FC = () => {
   const [isSavedInHistory, setIsSavedInHistory] = useState(false);
 
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
+  const [autoStartCamera, setAutoStartCamera] = useState(false);
   const [isWeatherModalOpen, setIsWeatherModalOpen] = useState(false);
   const [savedScans, setSavedScans] = useState<SavedScan[]>([]);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
@@ -92,11 +93,16 @@ export const App: React.FC = () => {
     SpeechAssistant.stop();
     setIsSpeaking(false);
     setIsSavedInHistory(false);
+    setAutoStartCamera(false);
     setCurrentStep('scanner');
   };
 
   const handleStartCameraScan = () => {
-    handleStartScan();
+    SpeechAssistant.stop();
+    setIsSpeaking(false);
+    setIsSavedInHistory(false);
+    setAutoStartCamera(true);
+    setCurrentStep('scanner');
   };
 
   const handleScanSampleLeaf = async (sampleUrl: string) => {
@@ -279,6 +285,7 @@ export const App: React.FC = () => {
         {currentStep === 'scanner' && (
           <LeafScanner
             currentLang={currentLang}
+            autoStartCamera={autoStartCamera}
             onAnalyze={handleAnalyzeLeaf}
             onCancel={() => setCurrentStep('welcome')}
           />
