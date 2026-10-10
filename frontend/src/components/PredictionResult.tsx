@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   CheckCircle2, 
   AlertTriangle, 
@@ -10,11 +10,16 @@ import {
   Leaf, 
   ShieldAlert,
   Globe,
-  Mic
+  Mic,
+  Layers,
+  Eye,
+  ThumbsUp,
+  ThumbsDown
 } from 'lucide-react';
 import type { Language, PredictionResponse } from '../types';
 import { TRANSLATIONS } from '../translations';
 import { SpeechAssistant } from '../utils/speech';
+import { submitFarmerFeedback } from '../services/api';
 
 interface PredictionResultProps {
   currentLang: Language;
@@ -37,9 +42,13 @@ export const PredictionResult: React.FC<PredictionResultProps> = ({
 }) => {
   const t = TRANSLATIONS[currentLang];
 
+  const [activeView, setActiveView] = useState<'original' | 'hsv'>('original');
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState<string | null>(null);
+
   const isInvalid = !prediction.is_leaf_detected || prediction.predicted_class === 'Invalid___Non_Leaf';
   const isUncertain = Boolean(prediction.is_uncertain && !isInvalid);
   const isHealthy = Boolean(prediction.is_healthy && !isUncertain && !isInvalid);
+  const hsv = prediction.hsv_segmentation;
 
   const handleReadResult = () => {
     let speechText = '';
@@ -53,6 +62,17 @@ export const PredictionResult: React.FC<PredictionResultProps> = ({
       speechText = `${prediction.crop}. ${prediction.condition}. ${prediction.plain_explanation}. ${t.confidence_question}: ${prediction.plain_confidence}.`;
     }
     SpeechAssistant.speak(speechText, currentLang);
+  };
+
+  const handleSendFeedback = async (rating: 'accurate' | 'partial' | 'incorrect') => {
+    setFeedbackSubmitted(rating);
+    await submitFarmerFeedback({
+      predicted_class: prediction.predicted_class,
+      rating,
+      is_accurate: rating === 'accurate',
+      actual_condition: prediction.condition,
+      notes: `Farmer feedback rating: ${rating}`
+    });
   };
 
   return (
@@ -128,16 +148,54 @@ export const PredictionResult: React.FC<PredictionResultProps> = ({
           </div>
         ) : (
           <div>
-            {/* Top Layout: Photo Thumbnail + Finding */}
+            {/* Top Layout: Photo / HSV Segmentation Switcher + Finding */}
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 pb-6 border-b border-warmborder">
               
-              {/* Leaf Photo Thumbnail */}
-              <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-2xl overflow-hidden border border-warmborder bg-ivory flex-shrink-0 shadow-subtle">
-                <img
-                  src={previewUrl}
-                  alt="Scanned Leaf"
-                  className="w-full h-full object-cover"
-                />
+              {/* Photo & HSV Display Box with Mode Switcher */}
+              <div className="flex flex-col items-center flex-shrink-0">
+                <div className="w-36 h-36 sm:w-44 sm:h-44 rounded-2xl overflow-hidden border border-warmborder bg-ivory shadow-subtle relative">
+                  <img
+                    src={activeView === 'hsv' && hsv?.segmentation_mask_url ? hsv.segmentation_mask_url : previewUrl}
+                    alt={activeView === 'hsv' ? 'HSV Color Segmentation' : 'Scanned Leaf'}
+                    className="w-full h-full object-cover transition-all"
+                  />
+                  {activeView === 'hsv' && (
+                    <span className="absolute bottom-2 left-2 bg-charcoal/85 text-cream text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm">
+                      🔬 HSV Heatmap
+                    </span>
+                  )}
+                </div>
+
+                {/* View Switcher: Original vs HSV Color-Space Segmentation */}
+                {hsv && hsv.segmentation_mask_url && (
+                  <div className="mt-2.5 flex items-center bg-ivory border border-warmborder rounded-lg p-0.5 shadow-subtle text-[11px] font-medium">
+                    <button
+                      type="button"
+                      onClick={() => setActiveView('original')}
+                      className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center space-x-1 ${
+                        activeView === 'original'
+                          ? 'bg-primary text-cream font-bold'
+                          : 'text-charcoal hover:bg-cream'
+                      }`}
+                    >
+                      <Eye className="w-3 h-3" />
+                      <span>Original</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveView('hsv')}
+                      className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center space-x-1 ${
+                        activeView === 'hsv'
+                          ? 'bg-ochre text-white font-bold'
+                          : 'text-charcoal hover:bg-cream'
+                      }`}
+                      title="HSV Color-Space Segmentation (CNN + HSV Analysis)"
+                    >
+                      <Layers className="w-3 h-3" />
+                      <span>HSV Seg</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Finding Text */}
@@ -201,14 +259,50 @@ export const PredictionResult: React.FC<PredictionResultProps> = ({
 
             </div>
 
+            {/* HSV Color-Space Quantitative Segmentation Panel */}
+            {hsv && (
+              <div className="mt-4 p-3.5 rounded-natural bg-ivory/80 border border-warmborder">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-charcoal flex items-center space-x-1.5">
+                    <Layers className="w-3.5 h-3.5 text-primary" />
+                    <span>HSV Color-Space Segmentation Metrics:</span>
+                  </span>
+                  <span className="text-[10px] text-muted font-medium">
+                    Spectral Vegetation Indices
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="p-2 rounded-lg bg-cream border border-warmborder">
+                    <span className="text-[10px] text-muted block">Healthy Foliage</span>
+                    <span className="text-xs sm:text-sm font-bold text-secondary-dark">
+                      {hsv.healthy_percentage}%
+                    </span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-cream border border-warmborder">
+                    <span className="text-[10px] text-muted block">Lesion / Blight</span>
+                    <span className={`text-xs sm:text-sm font-bold ${hsv.lesion_percentage > 15 ? 'text-danger' : 'text-ochre'}`}>
+                      {hsv.lesion_percentage}%
+                    </span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-cream border border-warmborder">
+                    <span className="text-[10px] text-muted block">Leaf Surface Area</span>
+                    <span className="text-xs sm:text-sm font-bold text-charcoal">
+                      {hsv.leaf_coverage_ratio}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Observable Damage / What to look for Signs Box */}
             {prediction.visible_symptoms_reference && prediction.visible_symptoms_reference.length > 0 && (
-              <div className="mt-5 p-4 rounded-natural bg-ivory/70 border border-warmborder/80">
+              <div className="mt-4 p-4 rounded-natural bg-ivory/70 border border-warmborder/80">
                 <h4 className="text-xs sm:text-sm font-bold text-charcoal flex items-center space-x-1.5 mb-2.5">
                   <Leaf className="w-4 h-4 text-secondary" />
                   <span>{isUncertain ? t.observable_damage_heading : t.what_to_look_for}:</span>
                 </h4>
-                <ul className="space-y-2 text-xs text-charcoal-muted">
+                <ul className="space-y-1.5 text-xs text-charcoal-muted">
                   {prediction.visible_symptoms_reference.map((sign, idx) => (
                     <li key={idx} className="flex items-start space-x-2">
                       <span className="text-primary font-bold mt-0.5">•</span>
@@ -229,6 +323,50 @@ export const PredictionResult: React.FC<PredictionResultProps> = ({
                 </div>
               </div>
             )}
+
+            {/* Adaptive Feedback Card (Slide 5: Adaptive Model Feedback) */}
+            <div className="mt-4 p-3.5 rounded-xl bg-ivory border border-warmborder flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+              <div className="text-center sm:text-left">
+                <span className="font-bold text-charcoal block">
+                  🌾 Farmer Field Verification (Adaptive Model Feedback):
+                </span>
+                <span className="text-[11px] text-muted">
+                  Does this symptom match what you observe on your plants?
+                </span>
+              </div>
+
+              {feedbackSubmitted ? (
+                <span className="px-3 py-1 rounded-full bg-secondary/20 text-primary-dark font-bold text-xs animate-fadeIn">
+                  ✓ Feedback Recorded — Model Calibrated
+                </span>
+              ) : (
+                <div className="flex items-center space-x-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleSendFeedback('accurate')}
+                    className="px-2.5 py-1.5 rounded-lg border border-warmborder bg-cream hover:bg-secondary/15 text-charcoal text-[11px] font-semibold flex items-center space-x-1 cursor-pointer transition-colors"
+                  >
+                    <ThumbsUp className="w-3 h-3 text-secondary" />
+                    <span>Accurate</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSendFeedback('partial')}
+                    className="px-2.5 py-1.5 rounded-lg border border-warmborder bg-cream hover:bg-ochre/15 text-charcoal text-[11px] font-semibold flex items-center space-x-1 cursor-pointer transition-colors"
+                  >
+                    <span>Partially</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSendFeedback('incorrect')}
+                    className="px-2.5 py-1.5 rounded-lg border border-warmborder bg-cream hover:bg-danger/15 text-charcoal text-[11px] font-semibold flex items-center space-x-1 cursor-pointer transition-colors"
+                  >
+                    <ThumbsDown className="w-3 h-3 text-danger" />
+                    <span>Different</span>
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Respectful Farmer Disclaimer */}
             <div className="mt-4 p-3 rounded-lg bg-ivory/40 border border-warmborder/60 text-[11px] text-muted leading-relaxed">

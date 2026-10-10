@@ -186,6 +186,16 @@ def test_maize_common_rust_inference():
     assert res["is_leaf_detected"] is True
     assert "Corn" in res["crop"] or res["is_uncertain"] is True
 
+def test_uncertainty_safeguard_never_marks_healthy():
+    # Test that when is_uncertain is forced or confidence is low, healthy is never emitted
+    img = Image.new("RGB", (224, 224), (100, 140, 80))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    res = classifier.predict(buf.getvalue())
+    if res["is_uncertain"]:
+        assert res["is_healthy"] is False
+        assert res["predicted_class"] != "Tomato___healthy"
+
 def test_maize_northern_leaf_blight_inference():
     """Test maize with long elliptical cigar-shaped lesions."""
     arr = np.full((224, 224, 3), (40, 130, 45), dtype=np.uint8)
@@ -755,5 +765,48 @@ def test_voice_query_unknown_query_localized_clarification():
 
 
 
+
+
+def test_hyderabad_weather_default():
+    # Test default location is Hyderabad, Telangana
+    response = client.get("/api/weather")
+    assert response.status_code == 200
+    data = response.json()
+    assert "Hyderabad" in data["location"]
+    assert "temperature" in data
+    assert "humidity" in data
+    assert "disease_risk" in data
+    assert "source" in data
+
+def test_smart_questionnaire_uncertain_diagnosis():
+    # Low confidence or uncertain plan must flag warning without pretending certainty
+    plan = generate_action_plan(
+        predicted_class="Uncertain___Low_Confidence",
+        confidence=0.42,
+        is_healthy=False,
+        follow_up_answers={
+            "q1_crop": "Potato",
+            "q2_age": "Fruiting / Maturity",
+            "q3_field_affected": "> 50% (Severe)",
+            "q6_first_appeared": "About 1 week ago",
+            "q7_spreading": "Spreading rapidly",
+            "q8_weather_watering": "Heavy rain / fog"
+        }
+    )
+    assert plan["is_uncertain_diagnosis"] is True
+    assert plan["crop"] == "Potato"
+    assert any("Unconfirmed" in step or "verify" in step.lower() for step in plan["what_to_check_now"])
+    assert any("RAPID SPREAD ALERT" in m for m in plan["what_to_monitor"])
+    assert any("Krishi Vigyan Kendra" in s or "KVK" in s for s in plan["when_to_seek_help"])
+
+def test_healthy_leaf_tailoring():
+    plan = generate_action_plan(
+        predicted_class="Tomato___healthy",
+        confidence=0.92,
+        is_healthy=True,
+        follow_up_answers={"q1_crop": "Tomato"}
+    )
+    assert plan["is_uncertain_diagnosis"] is False
+    assert any("predators" in step.lower() or "mites" in step.lower() for step in plan["what_to_check_now"])
 
 

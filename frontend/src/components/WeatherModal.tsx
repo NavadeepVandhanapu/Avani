@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CloudSun, X, Wind, Droplets, Thermometer, CloudRain, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { CloudSun, X, Wind, Droplets, Thermometer, CloudRain, AlertTriangle, ShieldCheck, MapPin, Wifi, WifiOff } from 'lucide-react';
 import type { Language, WeatherData } from '../types';
 import { TRANSLATIONS } from '../translations';
 
@@ -7,7 +7,7 @@ interface WeatherModalProps {
   currentLang: Language;
   weatherData: WeatherData;
   onClose: () => void;
-  onSelectLocation: (loc: string) => void;
+  onSelectLocation: (loc: string, lat?: number, lon?: number) => void;
 }
 
 export const WeatherModal: React.FC<WeatherModalProps> = ({
@@ -18,13 +18,39 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
 }) => {
   const t = TRANSLATIONS[currentLang];
   const [selectedLoc, setSelectedLoc] = useState(weatherData.location);
+  const [isDetectingGps, setIsDetectingGps] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
 
   const handleLocationChange = (loc: string) => {
     setSelectedLoc(loc);
     onSelectLocation(loc);
   };
 
+  const handleDetectGps = () => {
+    if (!navigator.geolocation) {
+      setGpsError("Geolocation is not supported by your browser.");
+      return;
+    }
+    setIsDetectingGps(true);
+    setGpsError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setIsDetectingGps(false);
+        const { latitude, longitude } = pos.coords;
+        onSelectLocation("Current GPS Location (Telangana)", latitude, longitude);
+      },
+      () => {
+        setIsDetectingGps(false);
+        setGpsError("Could not access GPS. Defaulted to Hyderabad, Telangana.");
+        onSelectLocation("Hyderabad, Telangana", 17.3850, 78.4867);
+      },
+      { timeout: 8000 }
+    );
+  };
+
   const regions = weatherData.available_regions || [
+    'Hyderabad, Telangana',
     'Warangal, Telangana',
     'Guntur, Andhra Pradesh',
     'Nashik, Maharashtra',
@@ -47,28 +73,51 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
               <h3 className="text-lg font-bold text-primary font-sans">
                 {t.weather_modal_title}
               </h3>
-              <p className="text-xs text-muted">
-                Source: {weatherData.source}
-              </p>
+              <div className="flex items-center space-x-1.5 mt-0.5">
+                {weatherData.is_live ? (
+                  <span className="inline-flex items-center space-x-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                    <Wifi className="w-3 h-3" />
+                    <span>Live Satellite Feed</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center space-x-1 text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
+                    <WifiOff className="w-3 h-3" />
+                    <span>Offline Cached Baseline</span>
+                  </span>
+                )}
+                <span className="text-[10px] text-muted">• {weatherData.source}</span>
+              </div>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-muted hover:bg-ivory transition-colors"
+            className="p-1.5 rounded-lg text-muted hover:bg-ivory transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Region Selector */}
-        <div className="my-4">
-          <label className="block text-xs font-semibold text-charcoal mb-1.5">
-            {t.switch_location}:
-          </label>
+        {/* Region Selector + GPS Button */}
+        <div className="my-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-semibold text-charcoal">
+              {t.switch_location}:
+            </label>
+            <button
+              type="button"
+              onClick={handleDetectGps}
+              disabled={isDetectingGps}
+              className="text-[11px] font-bold text-primary hover:text-primary-dark flex items-center space-x-1 cursor-pointer"
+            >
+              <MapPin className="w-3.5 h-3.5 text-ochre" />
+              <span>{isDetectingGps ? 'Detecting GPS...' : 'Use My GPS Location'}</span>
+            </button>
+          </div>
+
           <select
             value={selectedLoc}
             onChange={(e) => handleLocationChange(e.target.value)}
-            className="w-full px-3 py-2 rounded-natural border border-warmborder bg-ivory text-xs font-medium text-charcoal focus:ring-1 focus:ring-primary"
+            className="w-full px-3 py-2 rounded-natural border border-warmborder bg-ivory text-xs font-medium text-charcoal focus:ring-1 focus:ring-primary cursor-pointer"
           >
             {regions.map((reg) => (
               <option key={reg} value={reg}>
@@ -76,6 +125,10 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
               </option>
             ))}
           </select>
+
+          {gpsError && (
+            <p className="text-[11px] text-danger font-medium">{gpsError}</p>
+          )}
         </div>
 
         {/* Meteorological Parameters */}
@@ -139,7 +192,7 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
         <div className="mt-5 text-right">
           <button
             onClick={onClose}
-            className="px-5 py-2 rounded-natural bg-primary hover:bg-primary-dark text-cream font-medium text-xs shadow-subtle"
+            className="px-5 py-2 rounded-natural bg-primary hover:bg-primary-dark text-cream font-medium text-xs shadow-subtle cursor-pointer"
           >
             {t.btn_close}
           </button>

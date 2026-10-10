@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
-import { WelcomeHero } from './components/WelcomeHero';
+import { HomePage } from './components/HomePage';
 import { LeafScanner } from './components/LeafScanner';
 import { AnalysisLoading } from './components/AnalysisLoading';
 import { PredictionResult } from './components/PredictionResult';
@@ -8,6 +8,8 @@ import { FollowUpQuestionnaire } from './components/FollowUpQuestionnaire';
 import { ActionSupportPlan } from './components/ActionSupportPlan';
 import { WeatherModal } from './components/WeatherModal';
 import { ScanHistoryModal } from './components/ScanHistoryModal';
+import { NotificationsModal, REALTIME_NOTIFICATIONS } from './components/NotificationsModal';
+import { SituationalAlertPopup } from './components/SituationalAlertPopup';
 
 import type { 
   Language, 
@@ -45,11 +47,12 @@ export const App: React.FC = () => {
   const [savedScans, setSavedScans] = useState<SavedScan[]>([]);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   useEffect(() => {
-    loadWeatherData();
+    loadWeatherData("Hyderabad, Telangana", 17.3850, 78.4867);
     loadScans();
   }, []);
 
@@ -65,12 +68,28 @@ export const App: React.FC = () => {
     }
   }, [currentLang]);
 
-  const loadWeatherData = async (location?: string) => {
+  const loadWeatherData = async (location?: string, lat?: number, lon?: number) => {
     try {
-      const data = await fetchWeatherData(location);
+      const data = await fetchWeatherData(location || "Hyderabad, Telangana", lat, lon);
       setWeatherData(data);
     } catch (err) {
       console.warn('Weather load warning:', err);
+    }
+  };
+
+  const handleRequestGeolocation = () => {
+    if (typeof window !== 'undefined' && 'geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          loadWeatherData("Hyderabad, Telangana (GPS)", pos.coords.latitude, pos.coords.longitude);
+        },
+        () => {
+          loadWeatherData("Hyderabad, Telangana", 17.3850, 78.4867);
+        },
+        { timeout: 7000 }
+      );
+    } else {
+      loadWeatherData("Hyderabad, Telangana", 17.3850, 78.4867);
     }
   };
 
@@ -88,6 +107,25 @@ export const App: React.FC = () => {
     setIsSpeaking(false);
     setIsSavedInHistory(false);
     setCurrentStep('scanner');
+  };
+
+  const handleScanSampleLeaf = async (sampleUrl: string) => {
+    SpeechAssistant.stop();
+    setIsSpeaking(false);
+    setIsSavedInHistory(false);
+    setCurrentStep('analyzing');
+    setCurrentPreviewUrl(sampleUrl);
+
+    try {
+      const res = await fetch(sampleUrl);
+      const blob = await res.blob();
+      const filename = sampleUrl.split('/').pop() || 'leaf_sample.jpg';
+      const file = new File([blob], filename, { type: 'image/jpeg' });
+      await handleAnalyzeLeaf(file, sampleUrl);
+    } catch (err) {
+      console.error('Error fetching sample leaf:', err);
+      setCurrentStep('scanner');
+    }
   };
 
   const handleAnalyzeLeaf = async (fileOrBlob: File | Blob, previewUrl: string) => {
@@ -229,25 +267,48 @@ export const App: React.FC = () => {
         onOpenHistory={() => setIsHistoryModalOpen(true)}
         onOpenWeather={() => setIsWeatherModalOpen(true)}
         onOpenVoiceAssistant={() => setIsVoiceModalOpen(true)}
+        onOpenNotifications={() => setIsNotificationsOpen(true)}
         onGoHome={() => setCurrentStep('welcome')}
         scanCount={savedScans.length}
+        notificationCount={REALTIME_NOTIFICATIONS.length}
         weatherData={weatherData}
         isSpeaking={isSpeaking}
         onToggleSpeech={handleToggleSpeech}
       />
 
+      {/* Offline-Ready PWA Banner & Region Indicator */}
+      <div className="bg-[#1c3829] text-[#d4f04e] text-[11px] py-1.5 px-4 text-center border-b border-emerald-800/40 flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+        <span className="flex items-center space-x-1.5">
+          <span className="w-2 h-2 rounded-full bg-[#d4f04e] animate-pulse" />
+          <strong className="tracking-wide">Offline-Ready (PWA)</strong>: Cached diagnostic rules, symptoms & scan history work offline.
+        </span>
+        <span className="text-white/60 hidden sm:inline">•</span>
+        <span className="text-white/90">
+          📍 Default Agro Region: <strong>Hyderabad, Telangana</strong> ({weatherData?.temperature || 28.5}°C • {weatherData?.humidity || 76}% Humidity)
+        </span>
+      </div>
+
       {/* Main Workflow View Routing */}
       <main className="flex-1">
         {currentStep === 'welcome' && (
-          <WelcomeHero
+          <HomePage
             currentLang={currentLang}
             onLanguageChange={setCurrentLang}
             onStartScan={handleStartScan}
             onOpenHistory={() => setIsHistoryModalOpen(true)}
             onOpenWeather={() => setIsWeatherModalOpen(true)}
             onOpenVoiceAssistant={() => setIsVoiceModalOpen(true)}
+            onOpenNotifications={() => setIsNotificationsOpen(true)}
+            onScanSampleLeaf={handleScanSampleLeaf}
             scanCount={savedScans.length}
             weatherData={weatherData}
+            savedScans={savedScans}
+            onSelectSavedScan={(scan) => {
+              if (scan.guidance_summary) {
+                setActionPlan(scan.guidance_summary);
+                setCurrentStep('action_plan');
+              }
+            }}
           />
         )}
 
@@ -294,6 +355,7 @@ export const App: React.FC = () => {
             onSaveScan={handleSaveCurrentScan}
             isSaved={isSavedInHistory}
             onScanAnother={handleStartScan}
+            weatherData={weatherData}
           />
         )}
       </main>
@@ -307,13 +369,32 @@ export const App: React.FC = () => {
         currentScan={prediction}
       />
 
+      {/* Situational Climate & Scan Alert Toast (with Two-Way Voice and Geolocation prompt) */}
+      <SituationalAlertPopup
+        currentLang={currentLang}
+        weatherData={weatherData}
+        latestPrediction={prediction}
+        onRequestGeolocation={handleRequestGeolocation}
+        onOpenWeather={() => setIsWeatherModalOpen(true)}
+        onStartScan={handleStartScan}
+      />
+
+      {/* Real-time Notifications Modal (Multilingual Alerts) */}
+      {isNotificationsOpen && (
+        <NotificationsModal
+          currentLang={currentLang}
+          weatherData={weatherData}
+          onClose={() => setIsNotificationsOpen(false)}
+          onStartScan={handleStartScan}
+        />
+      )}
       {/* Weather Advisory Modal */}
       {isWeatherModalOpen && weatherData && (
         <WeatherModal
           currentLang={currentLang}
           weatherData={weatherData}
           onClose={() => setIsWeatherModalOpen(false)}
-          onSelectLocation={(loc) => loadWeatherData(loc)}
+          onSelectLocation={(loc, lat, lon) => loadWeatherData(loc, lat, lon)}
         />
       )}
 

@@ -1,0 +1,24 @@
+{
+  "name": "Avani — AI Crop Disease Detection & Action Support",
+  "short_name": "Avani",
+  "description": "Know your crop well being — Early Crop Disease Detection and Grounded Action Support for Farmers.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8F7F0",
+  "theme_color": "#285943",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
