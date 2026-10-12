@@ -1,5 +1,5 @@
 import React from 'react';
-import { History, CloudSun, Globe, Volume2, VolumeX, Bell } from 'lucide-react';
+import { History, CloudSun, Globe, Volume2, VolumeX, Mic, Bell } from 'lucide-react';
 import type { Language, WeatherData } from '../types';
 import { TRANSLATIONS } from '../translations';
 
@@ -8,7 +8,8 @@ interface NavbarProps {
   onLanguageChange: (lang: Language) => void;
   onOpenHistory: () => void;
   onOpenWeather: () => void;
-  onOpenNotifications: () => void;
+  onOpenVoiceAssistant?: () => void;
+  onOpenNotifications?: () => void;
   onGoHome: () => void;
   scanCount: number;
   notificationCount?: number;
@@ -22,6 +23,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLanguageChange,
   onOpenHistory,
   onOpenWeather,
+  onOpenVoiceAssistant,
   onOpenNotifications,
   onGoHome,
   scanCount,
@@ -56,8 +58,21 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
 
         {/* Action Controls */}
-        <div className="flex items-center space-x-2 sm:space-x-3">
+        <div className="flex items-center space-x-2 sm:space-x-2.5">
           
+          {/* Voice Assistant Action */}
+          {onOpenVoiceAssistant && (
+            <button
+              onClick={onOpenVoiceAssistant}
+              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border border-primary/20 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold transition-colors cursor-pointer"
+              title={t.voice_assistant_btn}
+              id="navbar-voice-assistant-btn"
+            >
+              <Mic className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{t.voice_assistant_btn}</span>
+            </button>
+          )}
+
           {/* Weather Indicator */}
           {weatherData && (
             <button

@@ -27,6 +27,7 @@ import {
   deleteScanRecord, 
   fetchWeatherData 
 } from './services/api';
+import { VoiceAssistantModal } from './components/VoiceAssistantModal';
 import { SpeechAssistant } from './utils/speech';
 
 type AppStep = 'welcome' | 'scanner' | 'analyzing' | 'prediction' | 'questionnaire' | 'action_plan';
@@ -46,6 +47,7 @@ export const App: React.FC = () => {
   const [isWeatherModalOpen, setIsWeatherModalOpen] = useState(false);
   const [savedScans, setSavedScans] = useState<SavedScan[]>([]);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -54,6 +56,18 @@ export const App: React.FC = () => {
     loadWeatherData("Hyderabad, Telangana", 17.3850, 78.4867);
     loadScans();
   }, []);
+
+  // When language changes while viewing action plan, re-fetch plan in selected language
+  useEffect(() => {
+    if (currentStep === 'action_plan' && prediction && followUpAnswers) {
+      const predCls = prediction.predicted_class || 'Uncertain___Low_Confidence';
+      const conf = prediction.confidence || 0.5;
+      const healthy = prediction.is_healthy || false;
+      fetchActionGuidance(predCls, conf, healthy, followUpAnswers, currentLang)
+        .then(newPlan => setActionPlan(newPlan))
+        .catch(err => console.warn('Could not re-fetch localized plan:', err));
+    }
+  }, [currentLang]);
 
   const loadWeatherData = async (location?: string, lat?: number, lon?: number) => {
     try {
@@ -129,23 +143,36 @@ export const App: React.FC = () => {
     setCurrentStep('analyzing');
 
     try {
-      const predResult = await predictCropLeaf(fileOrBlob);
+      const predResult = await predictCropLeaf(fileOrBlob, currentLang);
       setPrediction(predResult);
       setCurrentStep('prediction');
     } catch (err: any) {
       console.error('Inference error:', err);
+      const fallbackCrop = currentLang === 'te' ? 'గుర్తించబడని పంట' : currentLang === 'hi' ? 'अज्ञात फसल' : 'Unconfirmed Crop';
+      const fallbackCond = currentLang === 'te' ? 'అనిశ్చిత పంట పరిశీలన' : currentLang === 'hi' ? 'अनिश्चित फसल निरीक्षण' : 'Inconclusive Observation';
+      const fallbackExp = currentLang === 'te'
+        ? 'ఆకు పరిశీలన వివరాలు అసంపూర్తిగా ఉన్నాయి. తదుపరి 8 ప్రశ్నలకు సమాధానం ఇవ్వడం ద్వారా కార్యాచరణ ప్రణాళిక పొందవచ్చు.'
+        : currentLang === 'hi'
+        ? 'पत्ती के लक्षण पूरी तरह स्पष्ट नहीं हैं। कृपया आगे के 8 सवालों के जवाब देकर अपनी कार्य योजना तैयार करें।'
+        : 'Image processing completed with inconclusive symptom patterns. Please proceed with our 8 field questions to tailor next steps.';
+      const fallbackConf = currentLang === 'te'
+        ? 'సమస్య నిర్ధారణ కాలేదు — దయచేసి పంటను ఎంచుకోండి'
+        : currentLang === 'hi'
+        ? 'रोग की पुष्टि नहीं हुई — कृपया फसल चुनें'
+        : 'Low visual certainty — physical verification advised';
+
       setPrediction({
         success: true,
         is_leaf_detected: true,
         is_uncertain: true,
         predicted_class: 'Uncertain___Low_Confidence',
-        crop: 'General Crop',
-        condition: 'Inconclusive Observation',
+        crop: fallbackCrop,
+        condition: fallbackCond,
         is_healthy: false,
         confidence: 0.42,
         confidence_level: 'Low',
-        plain_confidence: 'Low visual certainty — physical verification advised',
-        plain_explanation: 'Image processing completed with inconclusive symptom patterns. Please proceed with our 8 field questions to tailor next steps.',
+        plain_confidence: fallbackConf,
+        plain_explanation: fallbackExp,
         top_predictions: []
       });
       setCurrentStep('prediction');
@@ -167,7 +194,7 @@ export const App: React.FC = () => {
       const conf = prediction?.confidence || 0.5;
       const healthy = prediction?.is_healthy || false;
 
-      const plan = await fetchActionGuidance(predCls, conf, healthy, answers);
+      const plan = await fetchActionGuidance(predCls, conf, healthy, answers, currentLang);
       setActionPlan(plan);
       setCurrentStep('action_plan');
     } catch (err) {
@@ -216,10 +243,22 @@ export const App: React.FC = () => {
       setIsSpeaking(false);
     } else {
       let textToRead = "Avani. Know your crop well being. AI-powered crop disease detection and practical action guidance for farmers.";
+      if (currentLang === 'te') {
+        textToRead = "అవని. మీ పంట ఆరోగ్యాన్ని తెలుసుకోండి. రైతులకు సులభమైన పంట తెగుళ్ల గుర్తింపు మరియు కార్యాచరణ సలహాలు.";
+      } else if (currentLang === 'hi') {
+        textToRead = "अवनी। अपनी फसल की सेहत जानिए। किसानों के लिए फसल रोग पहचान और व्यावहारिक कार्य योजना।";
+      }
+
       if (currentStep === 'prediction' && prediction) {
         textToRead = `${prediction.crop}. ${prediction.condition}. ${prediction.plain_explanation}`;
       } else if (currentStep === 'action_plan' && actionPlan) {
-        textToRead = `Action plan for ${actionPlan.crop}. What to check now: ${actionPlan.what_to_check_now[0] || ''}`;
+        if (currentLang === 'te') {
+          textToRead = `${actionPlan.crop} కార్యాచరణ ప్రణాళిక. ఇప్పుడు ఏం పరిశీలించాలి: ${actionPlan.what_to_check_now[0] || ''}`;
+        } else if (currentLang === 'hi') {
+          textToRead = `${actionPlan.crop} कार्य योजना। अभी क्या जांचें: ${actionPlan.what_to_check_now[0] || ''}`;
+        } else {
+          textToRead = `Action plan for ${actionPlan.crop}. What to check now: ${actionPlan.what_to_check_now[0] || ''}`;
+        }
       }
       setIsSpeaking(true);
       SpeechAssistant.speak(textToRead, currentLang, () => {
@@ -237,6 +276,7 @@ export const App: React.FC = () => {
         onLanguageChange={setCurrentLang}
         onOpenHistory={() => setIsHistoryModalOpen(true)}
         onOpenWeather={() => setIsWeatherModalOpen(true)}
+        onOpenVoiceAssistant={() => setIsVoiceModalOpen(true)}
         onOpenNotifications={() => setIsNotificationsOpen(true)}
         onGoHome={() => setCurrentStep('welcome')}
         scanCount={savedScans.length}
@@ -268,6 +308,7 @@ export const App: React.FC = () => {
             onStartCameraScan={handleStartCameraScan}
             onOpenHistory={() => setIsHistoryModalOpen(true)}
             onOpenWeather={() => setIsWeatherModalOpen(true)}
+            onOpenVoiceAssistant={() => setIsVoiceModalOpen(true)}
             onOpenNotifications={() => setIsNotificationsOpen(true)}
             onScanSampleLeaf={handleScanSampleLeaf}
             scanCount={savedScans.length}
@@ -307,6 +348,7 @@ export const App: React.FC = () => {
             onProceedToQuestions={handleProceedToQuestions}
             onScanAnother={handleStartScan}
             onScanWithCamera={handleStartCameraScan}
+            onOpenVoiceAssistant={() => setIsVoiceModalOpen(true)}
           />
         )}
 
@@ -332,6 +374,15 @@ export const App: React.FC = () => {
         )}
       </main>
 
+      {/* Two-Way Voice Interaction Assistant Modal */}
+      <VoiceAssistantModal
+        isOpen={isVoiceModalOpen}
+        onClose={() => setIsVoiceModalOpen(false)}
+        currentLang={currentLang}
+        onLanguageChange={setCurrentLang}
+        currentScan={prediction}
+      />
+
       {/* Situational Climate & Scan Alert Toast (with Two-Way Voice and Geolocation prompt) */}
       {currentStep !== 'scanner' && (
         <SituationalAlertPopup
@@ -353,7 +404,6 @@ export const App: React.FC = () => {
           onStartScan={handleStartScan}
         />
       )}
-
       {/* Weather Advisory Modal */}
       {isWeatherModalOpen && weatherData && (
         <WeatherModal

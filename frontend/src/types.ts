@@ -7,6 +7,22 @@ export interface ModelPrediction {
   condition: string;
 }
 
+export interface HSVHotspotPin {
+  id: string;
+  type: 'lesion' | 'chlorosis' | 'healthy' | 'blight_margin';
+  label: string;
+  telugu_label?: string;
+  hindi_label?: string;
+  x: number;
+  y: number;
+  color: string;
+  severity: string;
+  pigment?: string;
+  description: string;
+  telugu_desc?: string;
+  hindi_desc?: string;
+}
+
 export interface HSVSegmentationData {
   healthy_percentage: number;
   lesion_percentage: number;
@@ -14,6 +30,8 @@ export interface HSVSegmentationData {
   chlorosis_yellow_pct?: number;
   necrosis_brown_pct?: number;
   segmentation_mask_url?: string;
+  annotated_mask_url?: string;
+  hotspots?: HSVHotspotPin[];
 }
 
 export interface PredictionResponse {
@@ -108,6 +126,17 @@ export interface SavedScan {
   image_preview?: string;
   follow_up_answers?: FollowUpAnswers;
   guidance_summary?: ActionPlanResponse;
+}
+
+export interface VoiceQueryResponse {
+  success: boolean;
+  query: string;
+  language: Language;
+  matched_crop: string;
+  condition: string;
+  answer_text: string;
+  action_pointers: string[];
+  is_scan_context_applied: boolean;
 }
 
 export interface FarmerFeedback {

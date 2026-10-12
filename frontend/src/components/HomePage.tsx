@@ -25,6 +25,7 @@ interface HomePageProps {
   onOpenHistory: () => void;
   onOpenWeather: () => void;
   onOpenNotifications: () => void;
+  onOpenVoiceAssistant?: () => void;
   onScanSampleLeaf?: (sampleUrl: string) => void;
   scanCount: number;
   weatherData?: WeatherData | null;
@@ -97,6 +98,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   onOpenHistory,
   onOpenWeather,
   onOpenNotifications,
+  onOpenVoiceAssistant,
   onScanSampleLeaf,
   weatherData,
   savedScans = [],
@@ -392,6 +394,20 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <Volume2 className="w-4 h-4 text-[#d4f04e] group-hover:scale-110 animate-pulse" />
                 <span>{labels.voiceTeluguBtn}</span>
               </button>
+
+              {/* Interactive Voice Assistant */}
+              {onOpenVoiceAssistant && (
+                <button
+                  type="button"
+                  onClick={onOpenVoiceAssistant}
+                  className="px-5 py-3.5 rounded-full bg-emerald-950/70 hover:bg-emerald-900/80 text-white font-bold text-xs sm:text-sm backdrop-blur-md border border-emerald-400/50 shadow-lg transition-all cursor-pointer flex items-center space-x-2 group hover:scale-105"
+                  title="Interactive Voice Assistant"
+                  id="hero-voice-assistant-btn"
+                >
+                  <Mic className="w-4 h-4 text-[#d4f04e] group-hover:scale-110" />
+                  <span>Voice Assistant</span>
+                </button>
+              )}
 
             </div>
 

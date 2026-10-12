@@ -1,6 +1,6 @@
 # AVANI (అవని / अवनी)
 ### AI-Powered Crop Disease Detection & Action Support Platform
-*“Know your crop well being”*
+*“Know your crop well being ”*
 
 Avani is a functional, nature-inspired, accessible web platform built specifically for small and marginal farmers to detect crop leaf diseases, evaluate field context, and execute grounded, actionable inspection plans without overwhelming technical jargon or invented chemical prescriptions.
 
@@ -79,7 +79,7 @@ The Vite development server runs on `http://localhost:5173`.
 
 ---
 
-## 🧪 Automated Testing
+## 🧪Automated Testing
 
 ### Backend Test Suite
 Run the automated pytest suite covering health checks, crop listing, leaf validation, non-leaf rejection, guidance generation, scan persistence, and weather endpoints:

@@ -10,7 +10,7 @@ import json
 import base64
 import logging
 import numpy as np
-from PIL import Image, ImageStat
+from PIL import Image, ImageStat, ImageDraw
 from typing import Dict, Any, Tuple, Optional, List
 import onnxruntime as ort
 
@@ -183,7 +183,7 @@ class CropDiseaseClassifier:
         }
 
         # Check for blank / uniform color
-        if std_dev < 7.0:
+        if std_dev < 4.0 or (std_dev < 7.0 and plant_pixel_ratio < 0.30):
             return False, "The image appears blank or lacks detail.", metrics
 
         # Non-foliage rejection
@@ -234,6 +234,96 @@ class CropDiseaseClassifier:
             healthy_pct = round((healthy_count / total_leaf_pixels) * 100.0, 1)
             lesion_pct = round((lesion_count / total_leaf_pixels) * 100.0, 1)
 
+            # Calculate pinpoint hotspot coordinates for pigmentation differences
+            hotspots = []
+
+            # 1. Necrotic Lesion (Brown / Dark Necrosis)
+            if np.sum(brown_mask) > 15:
+                ys, xs = np.where(brown_mask)
+                cx, cy = float(np.median(xs)), float(np.median(ys))
+                hotspots.append({
+                    "id": "pin_lesion",
+                    "type": "lesion",
+                    "label": "Necrotic Lesion / Spore Cluster",
+                    "telugu_label": "తెగులు మచ్చ / కణజాల క్షీణత",
+                    "hindi_label": "सूखा धब्बा / परिगलन (नेक्रोसिस)",
+                    "x": round((cx / 300.0) * 100.0, 1),
+                    "y": round((cy / 300.0) * 100.0, 1),
+                    "color": "#EF4444",
+                    "severity": "High",
+                    "pigment": "Necrotic Brown",
+                    "description": "Pathogen damage: leaf cells have collapsed and dried up into a necrotic lesion.",
+                    "telugu_desc": "శిలీంధ్రం లేదా బ్యాక్టీరియా వల్ల ఆకు కణాలు దెబ్బతిని ఎండిపోయిన ప్రదేశం.",
+                    "hindi_desc": "रोगजनक के कारण कोशिकाएं नष्ट होकर सूखे भूरे धब्बे में बदल गई हैं।"
+                })
+
+            # 2. Chlorosis Yellowing Halo
+            if np.sum(yellow_mask) > 15:
+                ys, xs = np.where(yellow_mask)
+                cx, cy = float(np.median(xs)), float(np.median(ys))
+                hotspots.append({
+                    "id": "pin_chlorosis",
+                    "type": "chlorosis",
+                    "label": "Chlorotic Halo (Yellowing)",
+                    "telugu_label": "పత్రహరితం క్షీణత (పసుపు రంగు)",
+                    "hindi_label": "पीलापन / क्लोरोसिस घेरा",
+                    "x": round((cx / 300.0) * 100.0, 1),
+                    "y": round((cy / 300.0) * 100.0, 1),
+                    "color": "#F59E0B",
+                    "severity": "Moderate",
+                    "pigment": "Chlorotic Yellow",
+                    "description": "Chlorophyll depletion halo surrounding active infection or nutrient stress.",
+                    "telugu_desc": "మచ్చ చుట్టూ పచ్చదనం తగ్గి పసుపు రంగులోకి మారిన పత్రహరిత భాగం.",
+                    "hindi_desc": "संक्रमण के चारों ओर क्लोरोफिल की कमी से बना पीला घेरा।"
+                })
+
+            # 3. Healthy Foliage Tissue
+            if np.sum(healthy_mask) > 40:
+                ys, xs = np.where(healthy_mask)
+                cx, cy = float(np.median(xs)), float(np.median(ys))
+                hotspots.append({
+                    "id": "pin_healthy",
+                    "type": "healthy",
+                    "label": "Healthy Photosynthetic Tissue",
+                    "telugu_label": "ఆరోగ్యకరమైన ఆకుపచ్చ కణజాలం",
+                    "hindi_label": "स्वस्थ हरा ऊतक",
+                    "x": round((cx / 300.0) * 100.0, 1),
+                    "y": round((cy / 300.0) * 100.0, 1),
+                    "color": "#10B981",
+                    "severity": "Optimal",
+                    "pigment": "Chlorophyll Green",
+                    "description": "Uniform chlorophyll concentration actively conducting photosynthesis.",
+                    "telugu_desc": "సహజ పచ్చదనంతో ఆరోగ్యంగా ఉన్న ఆకు భాగం.",
+                    "hindi_desc": "सक्रिय प्रकाश संश्लेषण करने वाला स्वस्थ हरा हिस्सा।"
+                })
+
+            # 4. Spreading Blight Margin (if pale blight spots exist and sufficiently spaced)
+            if np.sum(blight_mask) > 30 and (np.sum(brown_mask) > 10 or np.sum(yellow_mask) > 10):
+                ys, xs = np.where(blight_mask)
+                cx, cy = float(np.median(xs)), float(np.median(ys))
+                dist_ok = True
+                for h_item in hotspots:
+                    dist = ((cx - (h_item["x"] / 100.0) * 300.0)**2 + (cy - (h_item["y"] / 100.0) * 300.0)**2)**0.5
+                    if dist < 40:
+                        dist_ok = False
+                        break
+                if dist_ok:
+                    hotspots.append({
+                        "id": "pin_blight",
+                        "type": "blight_margin",
+                        "label": "Spreading Lesion Margin",
+                        "telugu_label": "వ్యాపిస్తున్న తెగులు అంచు",
+                        "hindi_label": "फैलता हुआ रोग किनारा",
+                        "x": round((cx / 300.0) * 100.0, 1),
+                        "y": round((cy / 300.0) * 100.0, 1),
+                        "color": "#8B5CF6",
+                        "severity": "Active",
+                        "pigment": "Pale Discoloration",
+                        "description": "Active boundary where the lesion is progressing into healthy leaf tissue.",
+                        "telugu_desc": "తెగులు కొత్త ఆకు భాగాల్లోకి పాకుతున్న సరిహద్దు రేఖ.",
+                        "hindi_desc": "धब्बे का सक्रिय बाहरी सिरा जो नए हिस्से में फैल रहा है।"
+                    })
+
             # Construct segmentation visual overlay
             overlay = np_rgb.copy().astype(np.float32)
             # Background dimmed for focus
@@ -251,13 +341,38 @@ class CropDiseaseClassifier:
             overlay_img.save(buf, format="JPEG", quality=88)
             b64_str = base64.b64encode(buf.getvalue()).decode("utf-8")
 
+            # Construct annotated target visual image with drawn callout pins & target rings
+            annotated_img = overlay_img.copy()
+            draw = ImageDraw.Draw(annotated_img)
+            for pin in hotspots:
+                px = int(round((pin["x"] / 100.0) * 300.0))
+                py = int(round((pin["y"] / 100.0) * 300.0))
+                pin_color_rgb = (239, 68, 68) if pin["type"] == "lesion" else (245, 158, 11) if pin["type"] == "chlorosis" else (16, 185, 129) if pin["type"] == "healthy" else (139, 92, 246)
+                
+                # Outer glowing white/color rings
+                draw.ellipse([(px - 14, py - 14), (px + 14, py + 14)], outline=(255, 255, 255), width=2)
+                draw.ellipse([(px - 10, py - 10), (px + 10, py + 10)], outline=pin_color_rgb, width=2)
+                # Inner solid center pin
+                draw.ellipse([(px - 4, py - 4), (px + 4, py + 4)], fill=(255, 255, 255), outline=pin_color_rgb, width=1)
+                # Small crosshair marks
+                draw.line([(px - 18, py), (px - 14, py)], fill=(255, 255, 255), width=2)
+                draw.line([(px + 14, py), (px + 18, py)], fill=(255, 255, 255), width=2)
+                draw.line([(px, py - 18), (px, py - 14)], fill=(255, 255, 255), width=2)
+                draw.line([(px, py + 14), (px, py + 18)], fill=(255, 255, 255), width=2)
+
+            buf_annotated = io.BytesIO()
+            annotated_img.save(buf_annotated, format="JPEG", quality=90)
+            b64_annotated = base64.b64encode(buf_annotated.getvalue()).decode("utf-8")
+
             return {
                 "healthy_percentage": healthy_pct,
                 "lesion_percentage": lesion_pct,
                 "leaf_coverage_ratio": round((total_leaf_pixels / (300 * 300)) * 100.0, 1),
                 "chlorosis_yellow_pct": round((int(np.sum(yellow_mask)) / total_leaf_pixels) * 100.0, 1),
                 "necrosis_brown_pct": round((int(np.sum(brown_mask)) / total_leaf_pixels) * 100.0, 1),
-                "segmentation_mask_url": f"data:image/jpeg;base64,{b64_str}"
+                "segmentation_mask_url": f"data:image/jpeg;base64,{b64_str}",
+                "annotated_mask_url": f"data:image/jpeg;base64,{b64_annotated}",
+                "hotspots": hotspots
             }
         except Exception as e:
             logger.warning(f"HSV segmentation failed: {e}")
@@ -265,7 +380,9 @@ class CropDiseaseClassifier:
                 "healthy_percentage": 90.0,
                 "lesion_percentage": 10.0,
                 "leaf_coverage_ratio": 70.0,
-                "segmentation_mask_url": ""
+                "segmentation_mask_url": "",
+                "annotated_mask_url": "",
+                "hotspots": []
             }
 
     def preprocess(self, img: Image.Image) -> np.ndarray:
@@ -474,6 +591,9 @@ class CropDiseaseClassifier:
         elif len(top_3) > 1 and (top_3[0]["confidence"] - top_3[1]["confidence"]) < 0.08 and top_conf < 0.60 and not is_uncertain:
             is_uncertain = True
             uncertainty_reason = f"Ambiguous top candidates gap ({top_3[0]['confidence'] - top_3[1]['confidence']:.2f})"
+        elif len(top_3) > 1 and top_3[0]["crop"] != top_3[1]["crop"] and top_conf < 0.65:
+            is_uncertain = True
+            uncertainty_reason = f"Conflicting crop species in top candidates ({top_3[0]['crop']} vs {top_3[1]['crop']}) with score ({top_conf*100:.1f}% < 65%)"
 
         if is_uncertain:
             logger.info(f"Uncertainty safeguard active: {uncertainty_reason}")
@@ -485,33 +605,48 @@ class CropDiseaseClassifier:
             "is_healthy": "healthy" in top_class.lower()
         })
 
-        # CRITICAL SAFEGUARD: Never label an uncertain leaf as healthy
+        # Determine whether uncertainty is due to crop species, disease condition, or general distribution
+        species_in_top3 = list({cand["crop"] for cand in top_3})
+        is_species_ambiguous = len(species_in_top3) > 1 and top_conf < 0.55
+
+        # CRITICAL SAFEGUARD: Never label a low-confidence or uncertain leaf as healthy!
         if is_uncertain and meta["is_healthy"]:
             meta["is_healthy"] = False
             top_class = "Uncertain___Low_Confidence"
             meta["crop"] = "General Crop"
             meta["condition"] = "Inconclusive Observation"
-            plain_explanation = safeguard_message or "We couldn't identify this leaf reliably. The photo may be slightly blurred or symptoms are in early stages. Please answer our quick field questions to tailor next steps."
+            if safeguard_message:
+                plain_explanation = safeguard_message
+            elif is_species_ambiguous:
+                plain_explanation = "The leaf details are visible, but the plant species is outside our high-confidence recognition library. Please select your crop or answer a few quick questions to help us provide accurate next steps."
+            else:
+                plain_explanation = "The leaf is visibly detailed, but we cannot confirm the crop or condition with high certainty. Please answer our quick field questions or select your crop to tailor practical guidance."
         elif is_uncertain:
-            plain_explanation = safeguard_message or f"Visual signs may resemble {meta['condition']} on {meta['crop']}, but confidence is low. Please answer our quick field questions to tailor practical next steps."
+            if safeguard_message:
+                plain_explanation = safeguard_message
+            elif is_species_ambiguous:
+                plain_explanation = f"Visual features might resemble {meta['condition']} on {meta['crop']}, but the plant species cannot be confirmed reliably from this single photo. Please select your crop to refine the analysis."
+            else:
+                plain_explanation = f"The crop appears to be {meta['crop']}, but visual signs are in early stages or resemble multiple conditions. Please answer our quick field questions to tailor practical next steps."
         elif meta["is_healthy"]:
-            plain_explanation = f"Healthy foliage verified: {meta['crop']} leaf shows uniform chlorophyll ({hsv_segmentation.get('healthy_percentage', 95)}% healthy tissue) with zero significant lesion marks. No chemical interventions required."
+            plain_explanation = "The leaf in this photo appears healthy with normal green pigmentation. No obvious signs of leaf disease were seen."
         else:
             plain_explanation = f"Visual patterns in this photograph strongly resemble {meta['condition']} on {meta['crop']}."
 
-        # Plain confidence text
-        if is_uncertain:
+        # Plain confidence text (single percentage, farmer-friendly wording, not claiming diagnostic certainty)
+        score_pct = int(round(top_conf * 100))
+        if is_uncertain or top_conf < 0.48:
             confidence_level = "Low"
-            plain_confidence = f"Low visual certainty ({int(round(top_conf * 100))}%) — field questionnaire verification required"
+            plain_confidence = f"We're not sure what is affecting this leaf ({score_pct}% visual similarity) — please confirm crop"
         elif top_conf >= 0.75:
             confidence_level = "High"
-            plain_confidence = f"High visual match ({int(round(top_conf * 100))}%)"
-        elif top_conf >= 0.50:
-            confidence_level = "Moderate"
-            plain_confidence = f"Moderate visual match ({int(round(top_conf * 100))}%) — verify with field inspection"
+            if meta["is_healthy"]:
+                plain_confidence = f"The photo looks similar to healthy foliage ({score_pct}% visual similarity)"
+            else:
+                plain_confidence = f"The photo looks similar to this disease ({score_pct}% visual similarity)"
         else:
-            confidence_level = "Low"
-            plain_confidence = f"Low visual certainty ({int(round(top_conf * 100))}%) — follow-up questions recommended"
+            confidence_level = "Moderate"
+            plain_confidence = f"The photo looks somewhat similar to this condition ({score_pct}% visual similarity) — verify in field"
 
         return {
             "success": True,
