@@ -67,6 +67,35 @@ export interface FollowUpAnswers {
   q6_first_appeared?: string;
   q7_spreading?: string;
   q8_weather_watering?: string;
+  // Dynamic question keys
+  healthy_other_symptoms?: string;
+  healthy_distribution?: string;
+  healthy_water_stress?: string;
+  healthy_growth_stage?: string;
+  uncertain_crop_confirm?: string;
+  uncertain_symptom_type?: string;
+  uncertain_symptom_duration?: string;
+  uncertain_spread?: string;
+  spot_appearance?: string;
+  spot_plant_part?: string;
+  spot_field_spread?: string;
+  spot_spread_rate?: string;
+  spot_moisture_conditions?: string;
+  blight_progression?: string;
+  blight_plant_parts?: string;
+  blight_field_extent?: string;
+  blight_weather?: string;
+  rust_pustules?: string;
+  rust_leaf_surface?: string;
+  rust_spread?: string;
+  rust_crop_stage?: string;
+  mildew_appearance?: string;
+  mildew_canopy?: string;
+  mildew_spread?: string;
+  viral_symptoms?: string;
+  vector_presence?: string;
+  viral_spread?: string;
+  [key: string]: string | undefined;
 }
 
 export interface TimelineActionItem {

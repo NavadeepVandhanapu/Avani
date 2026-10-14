@@ -809,4 +809,140 @@ def test_healthy_leaf_tailoring():
     assert plan["is_uncertain_diagnosis"] is False
     assert any("predators" in step.lower() or "mites" in step.lower() for step in plan["what_to_check_now"])
 
+def test_dynamic_questionnaire_healthy_with_farmer_yellowing():
+    # Healthy scan where farmer reported subtle yellowing on single plant
+    plan = generate_action_plan(
+        predicted_class="Tomato___healthy",
+        confidence=0.95,
+        is_healthy=True,
+        follow_up_answers={
+            "q1_crop": "Tomato",
+            "healthy_other_symptoms": "Subtle yellowing or pale leaves on lower stems",
+            "healthy_distribution": "Single plant",
+            "healthy_water_stress": "Normal regular watering"
+        },
+        language="en"
+    )
+    assert plan["is_uncertain_diagnosis"] is False
+    # Verifies guidance addresses farmer's yellowing observation without false disease claim
+    assert any("yellowing" in step.lower() for step in plan["what_to_check_now"])
+    assert any("Field Observation" in bullet for bullet in plan["summary_bullets"])
+
+def test_dynamic_questionnaire_leaf_spot_target_rings():
+    # Leaf spot with concentric rings reported by farmer
+    plan = generate_action_plan(
+        predicted_class="Tomato___Early_blight",
+        confidence=0.88,
+        is_healthy=False,
+        follow_up_answers={
+            "q1_crop": "Tomato",
+            "spot_appearance": "Concentric rings (Fungal)",
+            "spot_plant_part": "Lower older leaves",
+            "spot_field_spread": "5-20% (Scattered patches)",
+            "spot_spread_rate": "Spreading rapidly",
+            "spot_moisture_conditions": "Overhead watering / heavy rain"
+        },
+        language="en"
+    )
+    assert any("Alternaria" in step or "concentric" in step.lower() for step in plan["what_to_check_now"])
+    assert any("20cm" in step or "lower leaves" in step.lower() for step in plan["what_to_check_now"])
+    assert any("RAPID SPREAD ALERT" in m for m in plan["what_to_monitor"])
+
+def test_dynamic_questionnaire_blight_rapid_progression():
+    # Blight with rapid progression and fruit decay
+    plan = generate_action_plan(
+        predicted_class="Potato___Late_blight",
+        confidence=0.91,
+        is_healthy=False,
+        follow_up_answers={
+            "q1_crop": "Potato",
+            "blight_progression": "Very rapid (2-3 days)",
+            "blight_plant_parts": "Fruits / tubers rotting",
+            "blight_field_extent": "20-50% (Widespread)",
+            "blight_weather": "Cool rain / mist / fog"
+        },
+        language="en"
+    )
+    assert any("RAPID BLIGHT PROGRESSION ALERT" in m for m in plan["what_to_monitor"])
+    assert any("tubers" in step.lower() or "decay" in step.lower() for step in plan["what_to_check_now"])
+
+def test_dynamic_questionnaire_rust_pustules_powder():
+    # Rust with active powdery pustules rubbing off
+    plan = generate_action_plan(
+        predicted_class="Corn_(maize)___Common_rust_",
+        confidence=0.85,
+        is_healthy=False,
+        follow_up_answers={
+            "q1_crop": "Corn (Maize)",
+            "rust_pustules": "Powder rubs off (Active rust)",
+            "rust_leaf_surface": "Both leaf surfaces",
+            "rust_spread": "Spreading with wind",
+            "rust_crop_stage": "Flowering / Tasseling"
+        },
+        language="en"
+    )
+    assert any("clothing" in step.lower() or "fingers" in step.lower() for step in plan["what_to_check_now"])
+
+def test_dynamic_questionnaire_mildew_dense_canopy():
+    # Mildew with dense shade canopy
+    plan = generate_action_plan(
+        predicted_class="Squash___Powdery_mildew",
+        confidence=0.89,
+        is_healthy=False,
+        follow_up_answers={
+            "q1_crop": "Squash",
+            "mildew_appearance": "White powdery coating",
+            "mildew_canopy": "Dense canopy / poor airflow",
+            "mildew_spread": "5-20% (Scattered)"
+        },
+        language="en"
+    )
+    assert any("suckers" in step.lower() or "air movement" in step.lower() for step in plan["what_to_check_now"])
+
+def test_dynamic_questionnaire_viral_whiteflies():
+    # Viral curl with whiteflies vector
+    plan = generate_action_plan(
+        predicted_class="Tomato___Tomato_Yellow_Leaf_Curl_Virus",
+        confidence=0.93,
+        is_healthy=False,
+        follow_up_answers={
+            "q1_crop": "Tomato",
+            "viral_symptoms": "Upward leaf curling",
+            "vector_presence": "Whiteflies present",
+            "viral_spread": "5-20% (Edge clusters)"
+        },
+        language="en"
+    )
+    assert any("sticky traps" in step.lower() or "whiteflies" in step.lower() for step in plan["what_to_check_now"])
+
+def test_dynamic_questionnaire_multilingual_telugu():
+    # Verifies Telugu localization of dynamic questionnaire synthesis
+    plan = generate_action_plan(
+        predicted_class="Tomato___Early_blight",
+        confidence=0.88,
+        is_healthy=False,
+        follow_up_answers={
+            "q1_crop": "Tomato",
+            "spot_appearance": "Concentric rings (Fungal)",
+            "spot_plant_part": "Lower older leaves",
+            "spot_spread_rate": "Spreading rapidly"
+        },
+        language="te"
+    )
+    assert any("ఆల్టర్నేరియా" in step for step in plan["what_to_check_now"])
+    assert any("గమనించిన మచ్చలు" in bullet for bullet in plan["summary_bullets"])
+
+def test_dynamic_questionnaire_fallback_safe():
+    # Ensures missing or empty answers do not crash and return sensible plan
+    plan = generate_action_plan(
+        predicted_class="Tomato___Early_blight",
+        confidence=0.80,
+        is_healthy=False,
+        follow_up_answers={}
+    )
+    assert plan["crop"] != ""
+    assert len(plan["what_to_check_now"]) > 0
+    assert len(plan["summary_bullets"]) > 0
+
+
 

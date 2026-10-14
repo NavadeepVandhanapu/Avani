@@ -7,6 +7,7 @@ crop identification, and comprehensive diagnostic logging.
 import io
 import os
 import json
+import time
 import base64
 import logging
 import numpy as np
@@ -128,13 +129,29 @@ class CropDiseaseClassifier:
 
         if os.path.exists(self.model_path):
             try:
-                # CPUExecutionProvider is reliable across all platforms
-                self.ort_session = ort.InferenceSession(self.model_path, providers=['CPUExecutionProvider'])
+                # Optimized SessionOptions for fast, low-latency CPU inference on ordinary laptops & mobile hosts
+                sess_opts = ort.SessionOptions()
+                cpu_cores = os.cpu_count() or 2
+                sess_opts.intra_op_num_threads = min(4, max(1, cpu_cores))
+                sess_opts.inter_op_num_threads = 1
+                sess_opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+                sess_opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+                
+                self.ort_session = ort.InferenceSession(self.model_path, sess_options=sess_opts, providers=['CPUExecutionProvider'])
                 self.model_loaded = True
                 inputs = self.ort_session.get_inputs()
                 outputs = self.ort_session.get_outputs()
-                logger.info(f"ONNX Model successfully loaded from {self.model_path}")
+                logger.info(f"ONNX Model successfully loaded from {self.model_path} (CPU threads: {sess_opts.intra_op_num_threads})")
                 logger.info(f"Input: {inputs[0].name} {inputs[0].shape} | Output: {outputs[0].name} {outputs[0].shape}")
+
+                # Warmup run to eliminate first-request cold-start latency
+                try:
+                    dummy_tensor = np.zeros((1, 3, 224, 224), dtype=np.float32)
+                    self.ort_session.run(None, {inputs[0].name: dummy_tensor})
+                    logger.info("ONNX inference session warmed up successfully.")
+                except Exception as warm_err:
+                    logger.warning(f"ONNX session warmup notice: {warm_err}")
+
             except Exception as e:
                 logger.error(f"Failed to initialize ONNX session from {self.model_path}: {e}")
                 self.ort_session = None
@@ -464,15 +481,22 @@ class CropDiseaseClassifier:
     def predict(self, image_bytes: bytes) -> Dict[str, Any]:
         """
         Main robust inference pipeline:
-        1. Validates and decodes image
+        1. Validates and decodes image (downscales huge mobile images to 800px max)
         2. Applies leaf verification
         3. Runs MobileNetV2 ONNX inference with diagnostic logging
         4. Applies strict uncertainty safeguards
-        5. Returns structured farmer-friendly prediction without assuming Tomato or guessing
+        5. Returns structured farmer-friendly prediction with latency profile
         """
+        t_start = time.perf_counter()
         try:
+            t0 = time.perf_counter()
             img = Image.open(io.BytesIO(image_bytes))
-            logger.info(f"Received image: format={img.format}, size={img.size}, mode={img.mode}")
+            # Downscale massive camera photos (e.g. 12MP/48MP) to max 800px dimension
+            # Saves hundreds of MBs in NumPy memory allocations while keeping full detail for 224x224 CNN & HSV
+            if max(img.size) > 800:
+                img.thumbnail((800, 800), Image.Resampling.BILINEAR)
+            t_decode = time.perf_counter() - t0
+            logger.info(f"Received image: format={img.format}, size={img.size}, mode={img.mode} (decode={t_decode*1000:.1f}ms)")
         except Exception as e:
             logger.warning(f"Image decode failed: {e}")
             return {
@@ -483,10 +507,13 @@ class CropDiseaseClassifier:
             }
 
         # 1. Leaf verification
+        t1 = time.perf_counter()
         is_valid, reason, metrics = self.validate_leaf_image(img)
-        logger.info(f"Leaf validation: is_valid={is_valid}, metrics={metrics}")
+        t_val = time.perf_counter() - t1
+        logger.info(f"Leaf validation: is_valid={is_valid}, val_time={t_val*1000:.1f}ms, metrics={metrics}")
         
         if not is_valid:
+            t_total = time.perf_counter() - t_start
             return {
                 "success": True,
                 "is_leaf_detected": False,
@@ -501,14 +528,22 @@ class CropDiseaseClassifier:
                 "top_predictions": [],
                 "model_info": {
                     "architecture": "MobileNetV2 Plant Disease Classifier",
-                    "status": "Non-foliage image"
+                    "status": "Non-foliage image",
+                    "latency_ms": {
+                        "decode": round(t_decode * 1000.0, 1),
+                        "validation": round(t_val * 1000.0, 1),
+                        "total": round(t_total * 1000.0, 1)
+                    }
                 }
             }
 
         # 1b. Compute HSV color-space segmentation
+        t2 = time.perf_counter()
         hsv_segmentation = self.generate_hsv_segmentation(img)
+        t_hsv = time.perf_counter() - t2
 
         # 2. Run ONNX Model Inference
+        t3 = time.perf_counter()
         if self.model_loaded and self.ort_session:
             try:
                 input_tensor = self.preprocess(img)
@@ -550,6 +585,7 @@ class CropDiseaseClassifier:
                 top_class, top_conf, top_3 = self.run_calibrated_cv_fallback(img, metrics)
         else:
             top_class, top_conf, top_3 = self.run_calibrated_cv_fallback(img, metrics)
+        t_infer = time.perf_counter() - t3
 
         # 3. Apply Strict Uncertainty Safeguards & Cross-Family Safeguards
         is_uncertain = False
@@ -646,7 +682,11 @@ class CropDiseaseClassifier:
                 plain_confidence = f"The photo looks similar to this disease ({score_pct}% visual similarity)"
         else:
             confidence_level = "Moderate"
-            plain_confidence = f"The photo looks somewhat similar to this condition ({score_pct}% visual similarity) — verify in field"
+        t_total = time.perf_counter() - t_start
+        logger.info(
+            f"[Latency Profile] Total: {t_total*1000:.1f}ms | Decode: {t_decode*1000:.1f}ms | "
+            f"Validation: {t_val*1000:.1f}ms | HSV: {t_hsv*1000:.1f}ms | Inference: {t_infer*1000:.1f}ms"
+        )
 
         return {
             "success": True,
@@ -667,7 +707,14 @@ class CropDiseaseClassifier:
                 "architecture": "MobileNetV2 PlantVillage ONNX",
                 "input_resolution": "224x224 RGB",
                 "classes_supported": len(PLANT_VILLAGE_CLASSES),
-                "is_onnx_active": self.model_loaded
+                "is_onnx_active": self.model_loaded,
+                "latency_ms": {
+                    "decode": round(t_decode * 1000.0, 1),
+                    "validation": round(t_val * 1000.0, 1),
+                    "hsv_segmentation": round(t_hsv * 1000.0, 1),
+                    "inference": round(t_infer * 1000.0, 1),
+                    "total": round(t_total * 1000.0, 1)
+                }
             }
         }
 

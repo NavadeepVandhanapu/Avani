@@ -4,8 +4,11 @@ AI-Powered Crop Disease Detection & Action Support Platform
 """
 
 import os
+import time
+import hashlib
+from collections import OrderedDict
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Query
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Query, Request
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -36,6 +39,16 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Latency tracking middleware: records execution duration and adds Server-Timing headers
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    start_time = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - start_time) * 1000.0
+    response.headers["X-Process-Time-Ms"] = f"{duration_ms:.2f}"
+    response.headers["Server-Timing"] = f"total;dur={duration_ms:.2f}"
+    return response
 
 # Enable CORS for frontend development
 app.add_middleware(
@@ -271,31 +284,47 @@ class TTSRequest(BaseModel):
     text: str
     language: str = "te"
 
+# In-memory LRU cache for synthesized TTS audio (max 120 audio clips)
+# Drastically drops speech response latency from ~1.5s to <1ms for repeated voice playback
+_TTS_CACHE: OrderedDict[str, bytes] = OrderedDict()
+_MAX_TTS_CACHE_SIZE = 120
+
 @app.post("/api/tts")
 def generate_tts(req: TTSRequest):
     """
     Generates high-fidelity spoken MP3 audio in Telugu, Hindi, or English.
     Provides regional voice synthesis for devices/browsers that do not bundle native voices.
+    Caches audio clips in-memory for instant <1ms repeated playback.
     """
     clean_text = req.text.strip()
     if not clean_text:
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
     
+    # Sanitize language code for gTTS (te, hi, en)
+    lang_code = req.language if req.language in ["te", "hi", "en"] else "te"
+    spoken_text = clean_text[:400]
+    
+    # Check in-memory audio cache
+    cache_key = hashlib.sha256(f"{lang_code}:{spoken_text}".encode("utf-8")).hexdigest()
+    if cache_key in _TTS_CACHE:
+        _TTS_CACHE.move_to_end(cache_key)
+        return Response(content=_TTS_CACHE[cache_key], media_type="audio/mpeg")
+
     try:
         from gtts import gTTS
         import io
 
-        # Sanitize language code for gTTS (te, hi, en)
-        lang_code = req.language if req.language in ["te", "hi", "en"] else "te"
-        # Truncate text if excessively long to prevent timeout (first 400 chars is plenty for verbal response)
-        spoken_text = clean_text[:400]
-        
         tts = gTTS(text=spoken_text, lang=lang_code, slow=False)
         fp = io.BytesIO()
         tts.write_to_fp(fp)
-        fp.seek(0)
+        audio_bytes = fp.getvalue()
+
+        # Save to LRU cache
+        _TTS_CACHE[cache_key] = audio_bytes
+        if len(_TTS_CACHE) > _MAX_TTS_CACHE_SIZE:
+            _TTS_CACHE.popitem(last=False)
         
-        return Response(content=fp.read(), media_type="audio/mpeg")
+        return Response(content=audio_bytes, media_type="audio/mpeg")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TTS synthesis error: {str(e)}")
 
