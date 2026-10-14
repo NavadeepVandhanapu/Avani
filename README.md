@@ -2,7 +2,7 @@
 ### AI-Powered Crop Disease Detection & Action Support Platform
 *“Know your crop well being ”*
 
-Avani is a functional, nature-inspired, accessible web platform built specifically for small and marginal farmers to detect crop leaf diseases, evaluate field context, and execute grounded, actionable inspection plans without overwhelming technical jargon or invented chemical prescriptions.
+Avani is a nature-inspired, accessible web platform built specifically for small and marginal farmers to detect crop leaf diseases, evaluate field context, and execute grounded, actionable inspection plans without overwhelming technical jargon or invented chemical prescriptions.
 
 ---
 
