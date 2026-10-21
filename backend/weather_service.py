@@ -4,10 +4,16 @@ Provides location-based weather data and factual disease-risk indexing based on 
 """
 
 import os
+import time
 import requests
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "")
+
+# In-memory weather cache: key -> (timestamp, data)
+# 10 minutes TTL ensures meteorological data stays fresh without spamming external APIs
+WEATHER_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+CACHE_TTL_SECONDS = 600.0
 
 REGIONAL_AGRO_PROFILES = {
     "Hyderabad, Telangana": {"temp": 28.5, "humidity": 76, "condition": "Humid / Partly Cloudy", "rainfall_mm": 1.5, "wind_kmh": 11, "lat": 17.3850, "lon": 78.4867},
@@ -89,7 +95,16 @@ def get_weather_data(location: str = "Hyderabad, Telangana", lat: Optional[float
     """
     Fetches live weather from Open-Meteo or OpenWeatherMap API,
     or falls back to Telangana regional meteorological references with clear attribution.
+    Results are cached in-memory for 10 minutes to deliver <1ms responses for repeated calls.
     """
+    # Check cache first
+    cache_key = f"{location}:{lat}:{lon}"
+    now = time.time()
+    if cache_key in WEATHER_CACHE:
+        cached_time, cached_val = WEATHER_CACHE[cache_key]
+        if now - cached_time < CACHE_TTL_SECONDS:
+            return cached_val
+
     # Determine coordinates
     resolved_lat = lat
     resolved_lon = lon
@@ -102,7 +117,7 @@ def get_weather_data(location: str = "Hyderabad, Telangana", lat: Optional[float
     if resolved_lat is not None and resolved_lon is not None:
         try:
             url = f"https://api.open-meteo.com/v1/forecast?latitude={resolved_lat}&longitude={resolved_lon}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m"
-            resp = requests.get(url, timeout=3.5)
+            resp = requests.get(url, timeout=2.0)
             if resp.status_code == 200:
                 data = resp.json()
                 current = data.get("current", {})
@@ -115,7 +130,7 @@ def get_weather_data(location: str = "Hyderabad, Telangana", lat: Optional[float
 
                 risk_info = calculate_disease_risk(temp, humidity, rainfall_mm)
                 
-                return {
+                result = {
                     "source": "Open-Meteo Live Agro Satellite Feed",
                     "is_live": True,
                     "location": location,
@@ -127,6 +142,8 @@ def get_weather_data(location: str = "Hyderabad, Telangana", lat: Optional[float
                     "disease_risk": risk_info,
                     "available_regions": list(REGIONAL_AGRO_PROFILES.keys())
                 }
+                WEATHER_CACHE[cache_key] = (now, result)
+                return result
         except Exception as e:
             print(f"[Avani Weather] Open-Meteo live query notice: {e}")
 
@@ -134,7 +151,7 @@ def get_weather_data(location: str = "Hyderabad, Telangana", lat: Optional[float
     profile = REGIONAL_AGRO_PROFILES.get(location, REGIONAL_AGRO_PROFILES["Hyderabad, Telangana"])
     risk_info = calculate_disease_risk(profile["temp"], profile["humidity"], profile["rainfall_mm"])
     
-    return {
+    result = {
         "source": "Telangana Agro-Climatic Baseline (Offline Cached)",
         "is_live": False,
         "location": location,
@@ -146,3 +163,5 @@ def get_weather_data(location: str = "Hyderabad, Telangana", lat: Optional[float
         "disease_risk": risk_info,
         "available_regions": list(REGIONAL_AGRO_PROFILES.keys())
     }
+    WEATHER_CACHE[cache_key] = (now, result)
+    return result

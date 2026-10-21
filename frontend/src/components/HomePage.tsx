@@ -428,19 +428,6 @@ export const HomePage: React.FC<HomePageProps> = ({
             {/* Right: Social Proof & Agro Stats Badge */}
             <div className="flex flex-wrap items-center gap-3">
               
-              {/* Farmer Avatars + 4.9 Rating */}
-              <div className="flex items-center space-x-2.5 bg-black/40 backdrop-blur-md px-3.5 py-2 rounded-full border border-white/20">
-                <div className="flex -space-x-1.5 overflow-hidden text-xs">
-                  <span className="inline-block w-6 h-6 rounded-full bg-amber-400 text-center leading-6 text-[12px] shadow">👨‍🌾</span>
-                  <span className="inline-block w-6 h-6 rounded-full bg-lime-400 text-center leading-6 text-[12px] shadow">👩‍🌾</span>
-                  <span className="inline-block w-6 h-6 rounded-full bg-emerald-500 text-center leading-6 text-[12px] shadow">🧑‍🌾</span>
-                </div>
-                <div className="flex items-center space-x-1 text-xs font-bold text-white">
-                  <span className="text-amber-400">★</span>
-                  <span>4.9</span>
-                  <span className="text-white/60 font-normal">| 10k+ Field Scans</span>
-                </div>
-              </div>
 
               {/* Weather Chip: Hyderabad, Telangana Focus */}
               <button

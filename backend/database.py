@@ -9,6 +9,8 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "avani.db")
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL;")
+    cursor.execute("PRAGMA synchronous=NORMAL;")
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS scans (
             id TEXT PRIMARY KEY,
@@ -36,6 +38,9 @@ def init_db():
             notes TEXT
         )
     """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_scans_created_at ON scans(created_at DESC);
+    """)
     conn.commit()
     conn.close()
 
@@ -43,7 +48,6 @@ def init_db():
 init_db()
 
 def save_feedback(feedback_data: Dict[str, Any]) -> Dict[str, Any]:
-    init_db()
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     fb_id = feedback_data.get("id") or f"fb_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:19]}"
@@ -69,7 +73,6 @@ def save_feedback(feedback_data: Dict[str, Any]) -> Dict[str, Any]:
     return feedback_data
 
 def save_scan(scan_data: Dict[str, Any]) -> Dict[str, Any]:
-    init_db()
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -101,7 +104,6 @@ def save_scan(scan_data: Dict[str, Any]) -> Dict[str, Any]:
     return scan_data
 
 def get_all_scans() -> List[Dict[str, Any]]:
-    init_db()
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
@@ -139,7 +141,6 @@ def get_all_scans() -> List[Dict[str, Any]]:
     return results
 
 def delete_scan(scan_id: str) -> bool:
-    init_db()
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM scans WHERE id = ?", (scan_id,))

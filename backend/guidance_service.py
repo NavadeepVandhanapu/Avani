@@ -5,6 +5,9 @@ questionnaire answers, and curated agricultural references.
 Fully supports English (en), Telugu (te), and Hindi (hi).
 """
 
+import json
+import copy
+from collections import OrderedDict
 from typing import Dict, Any, List
 from guidance_data import GUIDANCE_DATABASE, GENERIC_CROP_GUIDANCE
 from guidance_translations import (
@@ -17,6 +20,10 @@ from guidance_translations import (
     CROPS_LOCALIZED
 )
 
+# In-memory LRU cache for deterministic action plan generation
+_ACTION_PLAN_CACHE: OrderedDict[str, Dict[str, Any]] = OrderedDict()
+_MAX_PLAN_CACHE_SIZE = 250
+
 def generate_action_plan(
     predicted_class: str,
     confidence: float,
@@ -25,12 +32,23 @@ def generate_action_plan(
     language: str = "en"
 ) -> Dict[str, Any]:
     """
-    Synthesizes model diagnosis and 8-question farmer response into a practical,
+    Synthesizes model diagnosis and questionnaire response into a practical,
     fully localized action plan in English, Telugu, or Hindi.
-    Strictly differentiates confirmed high-confidence diagnoses from uncertain observations.
+    Cached in-memory to return identical plans in <0.1ms without repeated lookups.
     """
     if language not in ["en", "te", "hi"]:
         language = "en"
+
+    # Compute cache key from deterministic inputs
+    try:
+        answers_key = json.dumps(follow_up_answers or {}, sort_keys=True)
+    except Exception:
+        answers_key = str(follow_up_answers)
+    cache_key = f"{predicted_class}:{round(confidence, 2)}:{is_healthy}:{language}:{answers_key}"
+
+    if cache_key in _ACTION_PLAN_CACHE:
+        _ACTION_PLAN_CACHE.move_to_end(cache_key)
+        return copy.deepcopy(_ACTION_PLAN_CACHE[cache_key])
 
     # 0. Check uncertainty and farmer crop selection
     is_uncertain_diagnosis = (confidence < 0.55) or (predicted_class == "Uncertain___Low_Confidence")
@@ -59,16 +77,48 @@ def generate_action_plan(
     # Localize base reference content
     ref = get_localized_guidance_entry(matched_key, raw_ref, language=language)
 
-    # Extract follow-up context
+    # Extract follow-up context (supports both dynamic and legacy questionnaire keys)
+    farmer_crop = follow_up_answers.get("q1_crop") or follow_up_answers.get("uncertain_crop_confirm")
     raw_crop = farmer_crop or raw_ref.get("crop", "General Crop")
     crop_selected = get_localized_crop(raw_crop, language=language)
-    stage = follow_up_answers.get("q2_age", "Vegetative / Growth")
-    affected_pct = follow_up_answers.get("q3_field_affected", "< 5% (Isolated plants)")
+
+    stage = (
+        follow_up_answers.get("q2_age") or
+        follow_up_answers.get("rust_crop_stage") or
+        follow_up_answers.get("healthy_growth_stage") or
+        "Vegetative / Growth"
+    )
+    affected_pct = (
+        follow_up_answers.get("q3_field_affected") or
+        follow_up_answers.get("spot_field_spread") or
+        follow_up_answers.get("blight_field_extent") or
+        follow_up_answers.get("mildew_spread") or
+        follow_up_answers.get("viral_spread") or
+        follow_up_answers.get("healthy_distribution") or
+        "< 5% (Isolated plants)"
+    )
     companion_crops = follow_up_answers.get("q4_companion_crops", "None / Single Crop")
     weeds = follow_up_answers.get("q5_weeds", "Low / Clean field")
-    first_noticed = follow_up_answers.get("q6_first_appeared", "1-2 days ago")
-    spread_status = follow_up_answers.get("q7_spreading", "Spreading slowly")
-    weather_moisture = follow_up_answers.get("q8_weather_watering", "Normal drip / furrow")
+    first_noticed = (
+        follow_up_answers.get("q6_first_appeared") or
+        follow_up_answers.get("blight_progression") or
+        follow_up_answers.get("uncertain_symptom_duration") or
+        "1-2 days ago"
+    )
+    spread_status = (
+        follow_up_answers.get("q7_spreading") or
+        follow_up_answers.get("spot_spread_rate") or
+        follow_up_answers.get("rust_spread") or
+        follow_up_answers.get("uncertain_spread") or
+        "Spreading slowly"
+    )
+    weather_moisture = (
+        follow_up_answers.get("q8_weather_watering") or
+        follow_up_answers.get("spot_moisture_conditions") or
+        follow_up_answers.get("blight_weather") or
+        follow_up_answers.get("healthy_water_stress") or
+        "Normal drip / furrow"
+    )
 
     # Localized versions of questionnaire attributes
     loc_stage = QUESTIONNAIRE_VALUES_LOCALIZED.get(stage, {}).get(language, stage)
@@ -153,8 +203,126 @@ def generate_action_plan(
         else:
             check_now.append("Inspect nearby weeds as they frequently host alternate fungal spores and vector insects (aphids/whiteflies).")
 
+    # Dynamic Questionnaire Farmer-Reported Findings Integration
+    healthy_other = follow_up_answers.get("healthy_other_symptoms", "")
+    if healthy_other and "yellowing" in healthy_other.lower():
+        if language == "te":
+            check_now.append("ఆకు స్కాన్‌లో తెగులు మచ్చలు లేనప్పటికీ రైతు స్వల్ప పసుపు రంగును గమనించారు: పోషకాల లోపం లేదా నీటి ఎద్దడి కోసం వేర్ల భాగాన్ని తనిఖీ చేయండి.")
+        elif language == "hi":
+            check_now.append("पत्ती स्कैन में रोग के लक्षण न होने पर भी किसान ने हल्का पीलापन देखा: पोषक तत्वों की कमी या सिंचाई तनाव के लिए जड़ क्षेत्र की जांच करें।")
+        else:
+            check_now.append("Farmer noted subtle pale yellowing (no fungal marks on leaf scan): Inspect root zone for nutrient leaching or shallow irrigation.")
+    elif healthy_other and "curling" in healthy_other.lower():
+        if language == "te":
+            check_now.append("ఆకులు కొద్దిగా ముడుచుకుంటున్నట్లు రైతు తెలిపారు: లేత చిగుళ్ళ వద్ద రసం పీల్చే పురుగులు లేదా అధిక ఎండ ఒత్తిడిని గమనించండి.")
+        elif language == "hi":
+            check_now.append("पत्तियों के हल्के मुड़ने की सूचना है: नई कोपलों पर रस चूसक कीटों अथवा अत्यधिक गर्मी के तनाव की जांच करें।")
+        else:
+            check_now.append("Farmer reported slight leaf curling: Check new shoot tips and leaf undersides for early sucking pests or heat stress.")
+    elif healthy_other and "wilting" in healthy_other.lower():
+        if language == "te":
+            check_now.append("మధ్యాహ్నం వేళల్లో వాడిపోతున్నట్లు రైతు తెలిపారు: నేలలో తేమను పరిశీలించి వేరు కుళ్ళు లేదా పురుగుల నష్టాన్ని నిర్ధారించుకోండి.")
+        elif language == "hi":
+            check_now.append("दोपहर में हल्का मुरझाने की सूचना है: मिट्टी में नमी जांचें ताकि जड़ गलन या सूखे के तनाव की पहचान हो सके।")
+        else:
+            check_now.append("Farmer noted mild afternoon wilting: Check soil moisture at 10cm depth to rule out root-zone drought or nematode damage.")
+
+    uncertain_sym = follow_up_answers.get("uncertain_symptom_type", "")
+    if uncertain_sym and "spots" in uncertain_sym.lower():
+        if language == "te":
+            check_now.append("రైతు పొలంలో మచ్చలను గమనించారు: మచ్చలకు వలయాలు ఉన్నాయా (ఫంగస్) లేదా నీటి తడి అంచులు ఉన్నాయా (బ్యాక్టీరియా) అని నిర్ధారించండి.")
+        elif language == "hi":
+            check_now.append("किसान ने खेत में धब्बे देखे हैं: जांचें कि क्या धब्बों पर छल्लेदार वलय हैं (फंगल) अथवा पानी जैसे किनारे (जीवाणु)।")
+        else:
+            check_now.append("Farmer observed distinct spots in field: Check if spots have concentric target rings (fungal) vs water-soaked angular margins (bacterial).")
+    elif uncertain_sym and "powdery" in uncertain_sym.lower():
+        if language == "te":
+            check_now.append("రైతు బూజు లాంటి పొరను గమనించారు: ఆకు పైభాగాన తెల్లటి పొడి ఉందో లేదో (బూడిద తెగులు) లేదా కింది భాగంలో బూజు ఉందో చూడండి.")
+        elif language == "hi":
+            check_now.append("किसान ने पाउडर जैसी परत देखी: जांचें कि क्या ऊपरी पत्तियों पर सफेद पाउडर छूट रहा है या नीचे मखमली फफूंद है।")
+        else:
+            check_now.append("Farmer observed powdery coating: Verify if white dust rubs off upper leaves (powdery mildew) or appears as velvety mold underneath.")
+
+    spot_appearance = follow_up_answers.get("spot_appearance", "")
+    if spot_appearance and "Concentric" in spot_appearance:
+        if language == "te":
+            check_now.append("రైతు వలయాల లాంటి మచ్చలను నిర్ధారించారు (ఆల్టర్నేరియా ఫంగస్ లక్షణం). నీటి తుంపర్లు ఆకులపై పడకుండా నేల ద్వారా మాత్రమే నీరు అందించండి.")
+        elif language == "hi":
+            check_now.append("किसान ने छल्लेदार वलय वाले धब्बे पुष्ट किए (अल्टरनेरिया फफूंद लक्षण)। ऊपर से पानी का छिड़काव न करें जो बीजाणुओं को फैलाता है।")
+        else:
+            check_now.append("Farmer verified concentric target rings (typical of Alternaria fungal leaf spot). Avoid overhead sprinkler irrigation that splashes spores.")
+    elif spot_appearance and "Water-soaked" in spot_appearance:
+        if language == "te":
+            check_now.append("రైతు నీటి తడి కోణీయ మచ్చలను గుర్తించారు (బ్యాక్టీరియా సంకేతం). కొమ్మలు కత్తిరించే కత్తెరలను మొక్కల మధ్య శుభ్రపరచండి.")
+        elif language == "hi":
+            check_now.append("किसान ने पानी जैसे भीगे कोणीय धब्बे पुष्ट किए (जीवाणु संक्रमण)। पौधों की छंटाई के औजारों को नियमित विसंक्रमित करें.")
+        else:
+            check_now.append("Farmer verified water-soaked angular spots (indicative of bacterial infection). Disinfect pruning tools with 70% alcohol between plants.")
+
+    spot_plant_part = follow_up_answers.get("spot_plant_part", "")
+    if spot_plant_part and "Lower older" in spot_plant_part:
+        if language == "te":
+            check_now.append("కింది ఆకులపై మచ్చలు ఎక్కువగా ఉన్నాయి: నేల నుండి 20 సెం.మీ ఎత్తు వరకు ఉన్న రోగలక్షణ ఆకులను కత్తిరించి తీసివేయండి.")
+        elif language == "hi":
+            check_now.append("निचली पत्तियों पर धब्बे केंद्रित हैं: मिट्टी से 20 सेमी ऊंचाई तक की संक्रमित निचली पत्तियों की छंटाई करें।")
+        else:
+            check_now.append("Spots concentrated on lower canopy: Prune lower leaves within 20cm of soil to prevent upward spore splash.")
+
+    blight_parts = follow_up_answers.get("blight_plant_parts", "")
+    if blight_parts and ("Stems" in blight_parts or "Fruits" in blight_parts):
+        if language == "te":
+            check_now.append("కాండం/కాయల కుళ్ళు గమనించబడింది: తెగులు సోకిన తీగలను ప్లాస్టిక్ సంచిలో వేసి పొలానికి దూరంగా నాశనం చేయండి.")
+        elif language == "hi":
+            check_now.append("तने/फल सड़न देखी गई: बीजाणुओं को रोकने के लिए गंभीर रूप से झुलसे पौधों को खेत से दूर ले जाकर नष्ट करें।")
+        else:
+            check_now.append("Stem/fruit decay observed: Promptly bag and remove severely blighted vines away from the field to stop spore clouds.")
+
+    rust_pust = follow_up_answers.get("rust_pustules", "")
+    if rust_pust and "Powder rubs off" in rust_pust:
+        if language == "te":
+            check_now.append("చేతికి తుప్పు పొడి అంటుకుంటున్నట్లు రైతు నిర్ధారించారు. తెగులు బీజాలు బట్టలకు అంటుకోకుండా ఉండేందుకు తెల్లవారుజామున తడి ఆకుల మధ్య తిరగవద్దు.")
+        elif language == "hi":
+            check_now.append("किसान ने उंगलियों पर पाउडर छूटने की पुष्टि की। सुबह ओस के समय पत्तियों के बीच न चलें ताकि कपड़ों से बीजाणु न फैलें।")
+        else:
+            check_now.append("Farmer confirmed active powdery spores rubbing off on fingers. Do NOT walk through wet foliage early in morning to prevent spreading spores on clothing.")
+
+    mildew_can = follow_up_answers.get("mildew_canopy", "")
+    if mildew_can and "Dense canopy" in mildew_can:
+        if language == "te":
+            check_now.append("దట్టమైన నీడ మరియు గాలి ప్రసరణ లోపించినట్లు రైతు తెలిపారు: గాలి ప్రసరణ పెంచడానికి అనవసరమైన లోపలి పిలకలను తొలగించండి.")
+        elif language == "hi":
+            check_now.append("घनी छाया और खराब हवा संचार की सूचना है: हवा का आवागमन बढ़ाने के लिए गैर-उत्पादक भीतरी शाखाओं की छंटाई करें।")
+        else:
+            check_now.append("Farmer reported dense shade with poor air movement: Selectively prune non-productive interior suckers to promote air circulation.")
+
+    vector_p = follow_up_answers.get("vector_presence", "")
+    if vector_p and "Whiteflies" in vector_p:
+        if language == "te":
+            check_now.append("తెల్లదోమలు ఉన్నట్లు రైతు తెలిపారు: తెగులు వ్యాప్తిని అరికట్టేందుకు ఎకరానికి 15-20 పసుపు రంగు జిగురు బోర్డులను అమర్చండి.")
+        elif language == "hi":
+            check_now.append("सफेद मक्खियां सक्रिय हैं: कीटों की निगरानी व रोकथाम के लिए फसल की ऊंचाई पर प्रति एकड़ 15-20 पीले चिपचिपे कार्ड लगाएं।")
+        else:
+            check_now.append("Farmer noted active whiteflies: Install yellow sticky traps (15-20 per acre) at canopy height to monitor and reduce vector population.")
+
     # 3. Build customized "What to monitor"
     monitor_steps = list(ref.get("what_to_monitor", []))
+
+    blight_prog = follow_up_answers.get("blight_progression", "")
+    if blight_prog and ("Very rapid" in blight_prog or "rapid" in blight_prog.lower()):
+        if language == "te":
+            monitor_steps.insert(0, "అత్యవసర తెగులు హెచ్చరిక: చల్లని/పొగమంచు వాతావరణం తర్వాత 2-3 రోజుల్లోనే వ్యాపించినట్లు రైతు తెలిపారు. రోజూ క్షేత్ర తనిఖీ చేయండి.")
+        elif language == "hi":
+            monitor_steps.insert(0, "त्वरित झुलसा प्रसार चेतावनी: किसान ने 2-3 दिनों में अचानक प्रकोप की सूचना दी। प्रतिदिन सुबह खेत का निरीक्षण करें।")
+        else:
+            monitor_steps.insert(0, "RAPID BLIGHT PROGRESSION ALERT: Farmer noted sudden outbreak in 2-3 days following cool/foggy conditions. Scout field daily.")
+
+    if spot_plant_part and "Stems and fruits" in spot_plant_part:
+        if language == "te":
+            monitor_steps.insert(0, "అత్యవసరం: కాండం మరియు కాయలకు మచ్చలు పాకాయి. మిగిలిన పంటను కాపాడేందుకు సోకిన కాయలను వెంటనే తొలగించండి.")
+        elif language == "hi":
+            monitor_steps.insert(0, "उच्च प्राथमिकता: धब्बे तनों/फलों तक फैल गए हैं। शेष फसल की सुरक्षा के लिए प्रभावित फलों को तुरंत हटा दें।")
+        else:
+            monitor_steps.insert(0, "HIGH PRIORITY: Lesions spreading to stems/fruits. Cull and destroy infected fruit immediately to protect remaining crop.")
 
     if is_healthy and not is_uncertain_diagnosis:
         if language == "te":
@@ -272,6 +440,16 @@ def generate_action_plan(
             f"వ్యాప్తి ధోరణి: {loc_spread}",
             f"తేమ పరిస్థితి: {loc_moisture}"
         ]
+        if spot_appearance:
+            summary_bullets.insert(2, f"గమనించిన మచ్చలు: {spot_appearance}")
+        elif rust_pust:
+            summary_bullets.insert(2, f"తుప్పు లక్షణం: {rust_pust}")
+        elif blight_prog:
+            summary_bullets.insert(2, f"తెగులు వేగం: {blight_prog}")
+        elif healthy_other:
+            summary_bullets.insert(2, f"క్షేత్ర పరిశీలన: {healthy_other}")
+        elif uncertain_sym:
+            summary_bullets.insert(2, f"గమనించిన లక్షణం: {uncertain_sym}")
     elif language == "hi":
         summary_bullets = [
             f"फसल व अवस्था: {crop_selected} ({loc_stage})",
@@ -280,6 +458,16 @@ def generate_action_plan(
             f"प्रसार की स्थिति: {loc_spread}",
             f"नमी की स्थिति: {loc_moisture}"
         ]
+        if spot_appearance:
+            summary_bullets.insert(2, f"धब्बे का प्रकार: {spot_appearance}")
+        elif rust_pust:
+            summary_bullets.insert(2, f"रतुआ लक्षण: {rust_pust}")
+        elif blight_prog:
+            summary_bullets.insert(2, f"झुलसा गति: {blight_prog}")
+        elif healthy_other:
+            summary_bullets.insert(2, f"खेत अवलोकन: {healthy_other}")
+        elif uncertain_sym:
+            summary_bullets.insert(2, f"लक्षण प्रकार: {uncertain_sym}")
     else:
         summary_bullets = [
             f"Crop & Stage: {crop_selected} ({stage})",
@@ -288,8 +476,18 @@ def generate_action_plan(
             f"Spread Trend: {spread_status}",
             f"Moisture Context: {weather_moisture}"
         ]
+        if spot_appearance:
+            summary_bullets.insert(2, f"Spot Morphology: {spot_appearance}")
+        elif rust_pust:
+            summary_bullets.insert(2, f"Rust Symptom: {rust_pust}")
+        elif blight_prog:
+            summary_bullets.insert(2, f"Blight Progression: {blight_prog}")
+        elif healthy_other:
+            summary_bullets.insert(2, f"Field Observation: {healthy_other}")
+        elif uncertain_sym:
+            summary_bullets.insert(2, f"Observed Symptom: {uncertain_sym}")
 
-    return {
+    plan_result = {
         "crop": crop_selected,
         "condition": condition_display,
         "is_uncertain_diagnosis": is_uncertain_diagnosis,
@@ -304,3 +502,9 @@ def generate_action_plan(
         "safety_note": ref.get("safety_note", "Always consult a certified local agronomist before purchasing or applying any chemical spray."),
         "summary_bullets": summary_bullets
     }
+
+    _ACTION_PLAN_CACHE[cache_key] = plan_result
+    if len(_ACTION_PLAN_CACHE) > _MAX_PLAN_CACHE_SIZE:
+        _ACTION_PLAN_CACHE.popitem(last=False)
+
+    return plan_result

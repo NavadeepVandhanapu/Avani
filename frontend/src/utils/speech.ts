@@ -172,20 +172,6 @@ export class SpeechAssistant {
 
     this.stopListening();
 
-    // Ensure microphone permission is granted explicitly via getUserMedia to prevent Chrome localhost 'network' drop
-    if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // Close temporary track after permission confirmation
-        stream.getTracks().forEach(track => track.stop());
-      } catch (err: any) {
-        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-          callbacks.onError("Microphone permission was denied. Please allow microphone access in your browser.", "not-allowed");
-          return false;
-        }
-      }
-    }
-
     try {
       const win = window as any;
       const RecognitionClass = win.SpeechRecognition || win.webkitSpeechRecognition;
@@ -276,7 +262,7 @@ export class VoiceInputService {
     return !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
   }
 
-  public static startListening({
+  public static async startListening({
     lang,
     onResult,
     onError,
@@ -284,17 +270,19 @@ export class VoiceInputService {
   }: {
     lang: Language;
     onResult: (transcript: string, isFinal: boolean) => void;
-    onError: (err: string) => void;
+    onError: (err: string, code?: string) => void;
     onEnd: () => void;
-  }): void {
+  }): Promise<boolean> {
     if (!this.isSupported()) {
-      onError('Speech recognition is not supported in this browser. Please use Chrome, Edge, or Android Chrome.');
-      return;
+      onError('Speech recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.', 'not-supported');
+      return false;
     }
 
-    try {
-      this.stopListening();
+    // Stop any ongoing TTS audio so mic does not hear synthesized speech
+    SpeechAssistant.stop();
+    this.stopListening();
 
+    try {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       const rec = new SpeechRecognition();
 
@@ -313,7 +301,7 @@ export class VoiceInputService {
 
       rec.continuous = false;
       rec.interimResults = true;
-      rec.maxAlternatives = 1;
+      rec.maxAlternatives = 3;
 
       rec.onstart = () => {
         this.active = true;
@@ -340,10 +328,19 @@ export class VoiceInputService {
 
       rec.onerror = (event: any) => {
         this.active = false;
-        console.warn('SpeechRecognition error:', event.error);
-        if (event.error !== 'no-speech') {
-          onError(event.error || 'Voice input failed.');
+        const errCode = event.error || 'unknown';
+        console.warn('SpeechRecognition error:', errCode);
+
+        let userMsg = 'Could not recognize speech. Please speak near your device.';
+        if (errCode === 'not-allowed' || errCode === 'permission-denied') {
+          userMsg = 'Microphone permission was denied. Please click the mic icon in your address bar to allow access.';
+        } else if (errCode === 'no-speech') {
+          userMsg = 'No speech was detected. Please tap the mic and speak your answer clearly.';
+        } else if (errCode === 'network') {
+          userMsg = 'Browser speech server connection interrupted. You can still tap any option below.';
         }
+
+        onError(userMsg, errCode);
       };
 
       rec.onend = () => {
@@ -353,9 +350,11 @@ export class VoiceInputService {
 
       this.recognition = rec;
       rec.start();
+      return true;
     } catch (err: any) {
       this.active = false;
-      onError(err?.message || 'Could not start microphone.');
+      onError(err?.message || 'Could not start microphone.', 'initialization-failed');
+      return false;
     }
   }
 
@@ -376,70 +375,176 @@ export class VoiceInputService {
   }
 
   /**
-   * Intelligently maps farmer spoken phrase to the best question option
+   * Intelligently maps farmer spoken phrase to the best question option.
+   * Supports:
+   * 1. Ordinals / numbers (1, 2, 3 / first, second / ఒకటి, రెండు / पहला, दूसरा)
+   * 2. Direct string match across English, Telugu, and Hindi labels
+   * 3. Comprehensive agronomic keywords for all dynamic questionnaire categories
    */
   public static matchOption(
     spokenText: string,
     options: Array<{ label: { en: string; te: string; hi: string }; value: string }>,
     lang: Language
   ): string | null {
-    if (!spokenText) return null;
+    if (!spokenText || !options || options.length === 0) return null;
     const cleanSpoken = spokenText.toLowerCase().trim();
 
-    // 1. Exact or partial substring match in current language label
+    // 1. Ordinal & number detection (e.g. "option 1", "first option", "ఒకటి", "రెండవది", "पहला")
+    const indexMatchers: Array<{ patterns: string[]; index: number }> = [
+      {
+        patterns: ['1', 'one', 'first', 'option 1', 'option one', 'ఒకటి', 'ఒకటవది', 'మొదటిది', 'మొదటి', 'पहला', 'एक', 'पहला विकल्प'],
+        index: 0
+      },
+      {
+        patterns: ['2', 'two', 'second', 'option 2', 'option two', 'రెండు', 'రెండవది', 'రెండవ', 'दूसरा', 'दो', 'दूसरा विकल्प'],
+        index: 1
+      },
+      {
+        patterns: ['3', 'three', 'third', 'option 3', 'option three', 'మూడు', 'మూడవది', 'మూడవ', 'तीसरा', 'तीन', 'तीसरा विकल्प'],
+        index: 2
+      },
+      {
+        patterns: ['4', 'four', 'fourth', 'option 4', 'option four', 'నాలుగు', 'నాలుగవది', 'నాలుగవ', 'चौथा', 'चार', 'चौथा विकल्प'],
+        index: 3
+      },
+      {
+        patterns: ['5', 'five', 'fifth', 'option 5', 'option five', 'ఐదు', 'ఐదవది', 'ఐదవ', 'पांच', 'पांचवां', 'पांचवां विकल्प'],
+        index: 4
+      }
+    ];
+
+    for (const m of indexMatchers) {
+      if (m.index < options.length) {
+        for (const pat of m.patterns) {
+          // Exact match or isolated word match
+          if (cleanSpoken === pat || cleanSpoken.startsWith(`${pat} `) || cleanSpoken.endsWith(` ${pat}`) || cleanSpoken.includes(` ${pat} `)) {
+            return options[m.index].value;
+          }
+        }
+      }
+    }
+
+    // 2. Direct substring match in current language label
     for (const opt of options) {
-      const lbl = opt.label[lang].toLowerCase();
-      if (lbl.includes(cleanSpoken) || cleanSpoken.includes(lbl)) {
+      const lbl = (opt.label[lang] || '').toLowerCase().trim();
+      if (lbl && (lbl.includes(cleanSpoken) || cleanSpoken.includes(lbl))) {
         return opt.value;
       }
     }
 
-    // 2. Multilingual aliases check across English, Telugu, Hindi
+    // 3. Multilingual check across English, Telugu, and Hindi labels
     for (const opt of options) {
-      const enLbl = opt.label.en.toLowerCase();
-      const teLbl = opt.label.te.toLowerCase();
-      const hiLbl = opt.label.hi.toLowerCase();
-      const val = opt.value.toLowerCase();
+      const enLbl = (opt.label.en || '').toLowerCase().trim();
+      const teLbl = (opt.label.te || '').toLowerCase().trim();
+      const hiLbl = (opt.label.hi || '').toLowerCase().trim();
+      const val = opt.value.toLowerCase().trim();
 
-      if (cleanSpoken.includes(enLbl) || enLbl.includes(cleanSpoken) ||
-          cleanSpoken.includes(teLbl) || teLbl.includes(cleanSpoken) ||
-          cleanSpoken.includes(hiLbl) || hiLbl.includes(cleanSpoken) ||
-          cleanSpoken.includes(val) || val.includes(cleanSpoken)) {
+      if (enLbl && (cleanSpoken.includes(enLbl) || enLbl.includes(cleanSpoken))) return opt.value;
+      if (teLbl && (cleanSpoken.includes(teLbl) || teLbl.includes(cleanSpoken))) return opt.value;
+      if (hiLbl && (cleanSpoken.includes(hiLbl) || hiLbl.includes(cleanSpoken))) return opt.value;
+      if (val && (cleanSpoken.includes(val) || val.includes(cleanSpoken))) return opt.value;
+    }
+
+    // 4. Word-level overlap match (if at least 2 significant words match an option label)
+    const spokenWords = cleanSpoken.split(/\s+/).filter(w => w.length > 2);
+    for (const opt of options) {
+      const combinedTarget = `${opt.label.en} ${opt.label.te} ${opt.label.hi} ${opt.value}`.toLowerCase();
+      let matchCount = 0;
+      for (const w of spokenWords) {
+        if (combinedTarget.includes(w)) {
+          matchCount++;
+        }
+      }
+      if (matchCount >= 2 || (spokenWords.length === 1 && matchCount === 1)) {
         return opt.value;
       }
     }
 
-    // 3. Fallback keywords
-    const keywordMap: Record<string, string[]> = {
+    // 5. Rich semantic agronomic keyword mapping covering ALL dynamic questionnaire categories
+    const agronomicKeywords: Record<string, string[]> = {
+      // Crop confirmations
       'Tomato': ['tomato', 'టమోటా', 'టమాట', 'టమోటో', 'टमाटर'],
       'Potato': ['potato', 'ఆలు', 'ఆలూ', 'బంగాళాదుంప', 'బంగాళదుంప', 'आलू'],
       'Corn (Maize)': ['corn', 'maize', 'మొక్కజొన్న', 'జొన్న', 'మక్క', 'मक्का', 'भुट्टा'],
-      'Pepper / Chili': ['chili', 'pepper', 'capsicum', 'మిరప', 'మిర్చి', 'కాప్సికం', 'मिर्च', 'शिमला मिर्च'],
-      'Apple': ['apple', 'యాపిల్', 'ఆపిల్', 'सेब'],
-      'Grape': ['grape', 'ద్రాక్ష', 'అంగూర్', 'अंगूर'],
-      'Rice (Paddy)': ['rice', 'paddy', 'వరి', 'వరి పంట', 'ధాన్యం', 'चावल', 'धान'],
-      'Seedling / Early': ['seedling', 'early', 'నారు', 'మొలక', 'చిన్న', 'पौध', 'छोटा पौधा', 'पहला'],
-      'Vegetative Growth': ['vegetative', 'growth', 'ఆకులు', 'శాఖీయ', 'పెరుగుదల', 'కొమ్మలు', 'बढ़वार'],
-      'Flowering Stage': ['flowering', 'flower', 'పూత', 'పువ్వు', 'పూలు', 'फूल'],
-      'Fruiting / Maturity': ['fruiting', 'fruit', 'కాత', 'కాయ', 'గింజ', 'ముదిరిన', 'फल', 'दाना'],
-      '< 5% (Isolated plants)': ['isolated', 'very low', 'తక్కువ', '5%', '5 శాతం', 'కొద్దిగా', 'ఒకటి రెండు', 'कम', 'बहुत कम'],
-      '5-20% (Scattered patches)': ['scattered', 'patch', 'కొన్ని', 'మధ్యస్థం', '5-20%', 'कुछ हिस्से'],
-      '> 50% (Severe)': ['severe', 'heavy', 'majority', 'ఎక్కువ', 'సగానికి పైగా', '50%', 'మొత్తం', 'తీవ్రం', 'ज्यादा', 'गंभीर'],
-      'None / Single Crop': ['single', 'none', 'ఒకే పంట', 'వేరే లేదు', 'ఏమీ లేదు', 'एकल', 'केवल'],
-      'Low / Clean field': ['clean', 'no weeds', 'కలుపు లేదు', 'శుభ్రం', 'పరిశుభ్రం', 'సాఫ్', 'साफ', 'खरपतवार नहीं'],
-      'Heavy weeds': ['heavy weed', 'కలుపు ఎక్కువ', 'చాలా కలుపు', 'ఘనా', 'घना खरपतवार'],
-      '1-2 days ago': ['1-2 days', 'yesterday', 'today', 'నిన్న', 'మొన్న', 'రెండు రోజులు', 'నిన్ననే', 'ఇప్పుడే', 'कल', 'आज', 'दो दिन'],
-      'About 1 week ago': ['week', 'వారం', 'వారం క్రితం', 'హఫ్తా', 'एक हफ्ता', 'सप्ताह'],
-      'Spreading slowly': ['slow', 'నెమ్మదిగా', 'కొద్దికొద్దిగా', 'పాకుతోంది', 'धीरे'],
-      'Spreading rapidly': ['rapid', 'fast', 'వేగంగా', 'చాలా వేగంగా', 'తేజీ', 'तेजी से'],
-      'Heavy rain / fog': ['rain', 'fog', 'weather', 'వర్షం', 'మంచు', 'భారీ వర్షం', 'తేమ', 'बारिश', 'कोहरा', 'नमी'],
-      'Normal drip / furrow': ['drip', 'normal', 'డ్రిప్', 'సాధారణ', 'నీరు', 'నార్మల్', 'ड्रिप', 'सामान्य']
+      'Pepper / Chili': ['chili', 'pepper', 'capsicum', 'మిరప', 'మిర్చి', 'కాప్సికం', 'మిర్చిపంట', 'मिर्च', 'शिमला मिर्च'],
+      'Apple': ['apple', 'యాపిల్', 'ఆపిల్', 'సేబ్', 'सेब'],
+      'Grape': ['grape', 'ద్రాక్ష', 'అంగూర్', 'అంగూర', 'अंगूर'],
+      'Rice (Paddy)': ['rice', 'paddy', 'వరి', 'వరి పంట', 'ధాన్యం', 'వరిచేను', 'चावल', 'धान'],
+      'Other Crop': ['other', 'వేరే', 'ఇతర', 'వేరే పంట', 'అన్యం', 'अन्य'],
+
+      // Leaf tier
+      'Lower / older leaves first': ['lower', 'old', 'bottom', 'కింది', 'కింద', 'అడుగున', 'పాత ఆకులు', 'కింది ఆకులు', 'నిచలి', 'निचली', 'पुरानी', 'नीचे'],
+      'Upper / new leaves first': ['upper', 'top', 'new', 'పై', 'పై ఆకులు', 'కొత్త ఆకులు', 'చిగురు', 'చిగుర్లు', 'ऊपरी', 'नई पत्तियां', 'ऊपर'],
+      'All leaves uniformly': ['all', 'uniform', 'whole', 'అన్ని', 'మొత్తం', 'అంతటా', 'పొలమంతా', 'అన్ని ఆకులు', 'सभी', 'पूरे पौधे'],
+
+      // Crop stage
+      'Seedling / Early': ['seedling', 'early', 'నారు', 'మొలక', 'చిన్న', 'నారుమడి', 'చిన్న మొక్క', 'पौध', 'छोटा पौधा', 'शुरुआती'],
+      'Vegetative Growth': ['vegetative', 'growth', 'శాఖీయ', 'పెరుగుదల', 'కొమ్మలు', 'ఆకులు ఎక్కువ', 'बढ़वार', 'शाखाएं'],
+      'Flowering Stage': ['flowering', 'flower', 'bloom', 'పూత', 'పువ్వు', 'పూలు', 'పూత దశ', 'फूल', 'फूल आना'],
+      'Fruiting / Maturity': ['fruiting', 'fruit', 'కాత', 'కాయ', 'గింజ', 'కాయలు', 'ముదిరిన', 'फल', 'दाना', 'पकना'],
+
+      // Field spread %
+      '< 5% (Isolated plants)': ['isolated', 'less than 5', 'తక్కువ', '5%', '5 శాతం', 'కొద్దిగా', 'ఒకటి రెండు', 'విడిగా', 'చాలా తక్కువ', 'कम', 'बहुत कम', 'छिटपुट'],
+      '5-20% (Scattered patches)': ['scattered', 'patch', 'కొన్ని', 'మధ్యస్థం', '5-20%', '5 నుండి 20', 'కొన్ని చోట్ల', 'कुछ हिस्से', 'मध्यम'],
+      '> 50% (Severe)': ['severe', 'heavy', 'majority', 'all over', 'ఎక్కువ', 'సగానికి పైగా', '50%', '50 శాతం కంటే ఎక్కువ', 'మొత్తం', 'తీవ్రం', 'తీవ్రంగా', 'చాలా ఎక్కువ', 'ज्यादा', 'गंभीर', '50% से ज्यादा'],
+
+      // Duration
+      '1-2 days ago': ['1-2 days', 'yesterday', 'today', 'recent', 'నిన్న', 'మొన్న', 'రెండు రోజులు', 'నిన్ననే', 'ఇప్పుడే', 'ఒకటి రెండు రోజులు', 'कल', 'आज', 'दो दिन', 'हाल ही में'],
+      '3-7 days ago': ['3-7 days', 'week', 'వారం', 'వారం క్రితం', 'నాలుగు రోజులు', 'ఐదు రోజులు', 'కొన్ని రోజులు', 'హఫ్తా', 'एक हफ्ता', '3-7 दिन'],
+      '> 2 weeks ago': ['2 weeks', 'long time', 'రెండు వారాలు', 'పది రోజులు', 'చాలా రోజులు', 'నెల', 'రెండు వారాల కంటే ఎక్కువ', '2 हफ्ते से ज्यादा', 'बहुत दिन'],
+
+      // Spread speed
+      'Spreading slowly': ['slow', 'నెమ్మదిగా', 'కొద్దికొద్దిగా', 'పాకుతోంది', 'నిదానంగా', 'ఆలస్యంగా', 'धीरे', 'धीमी गति'],
+      'Spreading rapidly': ['rapid', 'fast', 'quick', 'వేగంగా', 'చాలా వేగంగా', 'త్వరగా', 'గబగబా', 'తేజీ', 'तेजी से', 'जल्दी'],
+      'Remained the same': ['same', 'stable', 'stopped', 'అలాగే ఉంది', 'ఆగింది', 'పెరగలేదు', 'స్థిరంగా', 'మార్పు లేదు', 'रुका हुआ', 'स्थिर', 'वैसा ही'],
+
+      // Weather / moisture
+      'Heavy rain / high humidity / fog': ['rain', 'fog', 'humidity', 'wet', 'వర్షం', 'మంచు', 'భారీ వర్షం', 'తేమ', 'చీకటి', 'తుఫాను', 'కురిసింది', 'बारिश', 'कोहरा', 'नमी', 'गीला'],
+      'Dry / normal weather': ['dry', 'normal', 'hot', 'sun', 'ఎండ', 'పొడి', 'వేడి', 'సాధారణ', 'వర్షం లేదు', 'డ్రై', 'सूखा', 'धूप', 'सामान्य'],
+
+      // Spot appearance (dynamic leaf spot)
+      'Concentric dark rings (Target board)': ['concentric', 'rings', 'target', 'వలయాలు', 'చక్రాలు', 'చక్రాల వంటి', 'చుట్లు', 'గుండ్రని వలయాలు', 'छल्ले', 'गोल छल्ले', 'कंसेंट्रिक'],
+      'Irregular angular brown spots': ['irregular', 'angular', 'కోణీయ', 'క్రమరహిత', 'కోణాలు', 'మూలల వంటి', 'अनियमित', 'कोणीय धब्बे'],
+      'Small circular spots with dark border': ['small circular', 'border', 'చిన్న', 'గుండ్రని', 'చిన్న మచ్చలు', 'నల్లటి అంచు', 'छोटे गोल धब्बे', 'किनारे'],
+      'Water-soaked dark lesions': ['water soaked', 'lesion', 'తడి', 'నీటి మచ్చలు', 'కుళ్ళు', 'ముదురు మచ్చలు', 'जलभराव', 'पानी जैसे धब्बे'],
+
+      // Rust pustules
+      'Powdery golden-orange pustules': ['powder', 'golden', 'orange', 'పౌడర్', 'పొడి', 'నారింజ', 'పసుపు పొడి', 'బంగారు', 'पाउडर', 'नारंगी फफूंद'],
+      'Dark brown / black raised pustules': ['raised', 'dark brown', 'black', 'ఎత్తైన', 'నల్లటి', 'గోధుమ', 'ఉబ్బిన', 'उभरे हुए', 'काले धब्बे'],
+      'Flat yellow spots (no powder)': ['flat', 'yellow spots', 'చదును', 'పొడి లేదు', 'పసుపు మచ్చలు', 'సమతలంగా', 'चपटे धब्बे', 'पाउडर नहीं'],
+
+      // Blight progression
+      'Lesions with yellow halo (Early blight)': ['halo', 'yellow halo', 'early blight', 'ఎర్లీ బ్లైట్', 'పసుపు రంగు అంచు', 'హలో', 'పీలా గేరా', 'पीला घेरा', 'अगेती'],
+      'Rapidly spreading water-soaked rot (Late blight)': ['late blight', 'water soaked rot', 'లేట్ బ్లైట్', 'కుళ్ళు', 'వేగంగా కుళ్ళిపోవడం', 'నీటి కుళ్ళు', 'पछेती', 'पानी जैसा सड़न'],
+      'Elongated streaks along leaf veins': ['streak', 'veins', 'elongated', 'చారలు', 'ఈనెలు', 'రేఖలు', 'పొడవాటి చారలు', 'धारियां', 'नसें'],
+      'Tip and margin burn only': ['tip', 'margin', 'burn', 'కొనలు', 'అంచులు', 'ఎండిపోవడం', 'మాడిపోవడం', 'చివర్లు', 'किनारे जलना', 'नोक'],
+
+      // Mildew symptoms
+      'White powdery dusting on surface': ['white powdery', 'dusting', 'తెల్లటి', 'బూడిద', 'పిండి', 'చూర్ణం', 'పైభాగం', 'सफेद पाउडर', 'धूल'],
+      'Velvety olive-brown mold underneath': ['velvety', 'underneath', 'mold', 'ఆకు కింద', 'మసి', 'వెల్వెట్', 'బూజు', 'కింది భాగం', 'फफूंद', 'निचली सतह'],
+      'Grey fuzzy mold on stems and leaves': ['grey fuzzy', 'fuzzy', 'బూడిద రంగు', 'కాండం', 'కొమ్మలపై', 'ग्रे फफूंद', 'तना'],
+
+      // Viral symptoms
+      'Severe upward / downward leaf curl': ['curl', 'leaf curl', 'ముడుచుకుపోవడం', 'ముడత', 'ఆకు ముడత', 'పైకి ముడుచుకోవడం', 'కిందికి ముడత', 'पत्ती मुड़ना', 'मुड़ाव'],
+      'Mosaic yellow-green mottled pattern': ['mosaic', 'mottled', 'మొజాయిక్', 'రంగులు మారడం', 'పసుపు పచ్చ చారలు', 'चितकबरा', 'मोज़ेक'],
+      'Fine webbing on underside (Spider mites)': ['webbing', 'spider mites', 'mites', 'బూజు', 'నల్లులు', 'సాలెగూడు', 'పురుగులు', 'मकड़ी जाला', 'माइट्स'],
+      'Thickened leathery puckered leaves': ['leathery', 'thick', 'మందంగా', 'తోలు వంటి', 'మోటుగా', 'దళసరి', 'मोटी पत्तियां', 'कड़ी पत्तियां'],
+
+      // Healthy crop observations
+      'No other symptoms': ['no symptoms', 'healthy', 'clear', 'fine', 'ఏమీ లేదు', 'వేరే లక్షణాలు లేవు', 'సమస్య లేదు', 'బాగుంది', 'ఆరోగ్యంగా', 'कोई लक्षण नहीं', 'सब ठीक'],
+      'Some leaves wilting / dropping': ['wilting', 'dropping', 'వాడిపోవడం', 'రాలిపోవడం', 'వడలిపోవడం', 'ఆకులు రాలడం', 'मुरझाना', 'पत्तियां गिरना'],
+      'Yellowing patches on canopy': ['yellowing', 'canopy', 'పసుపు పచ్చ', 'పచ్చదనం తగ్గింది', 'పసుపు మచ్చలు', 'చెట్టు పసుపు', 'पीलापन', 'पीले पैच'],
+      'Stunted growth / small leaves': ['stunted', 'small leaves', 'ఎదగడం లేదు', 'ఎదుగుదల లేదు', 'చిన్న ఆకులు', 'పొట్టిగా', 'बौना पौधा', 'छोटी पत्तियां']
     };
 
-    for (const [val, keywords] of Object.entries(keywordMap)) {
-      for (const kw of keywords) {
-        if (cleanSpoken.includes(kw.toLowerCase())) {
-          return val;
+    // Check agronomic keywords against options
+    for (const opt of options) {
+      const keywords = agronomicKeywords[opt.value];
+      if (keywords) {
+        for (const kw of keywords) {
+          if (cleanSpoken.includes(kw.toLowerCase())) {
+            return opt.value;
+          }
         }
       }
     }

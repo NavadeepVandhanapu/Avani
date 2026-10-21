@@ -356,6 +356,7 @@ export const App: React.FC = () => {
           <FollowUpQuestionnaire
             currentLang={currentLang}
             initialCrop={prediction?.crop}
+            prediction={prediction}
             onComplete={handleCompleteQuestionnaire}
             onBackToResult={() => setCurrentStep('prediction')}
           />
