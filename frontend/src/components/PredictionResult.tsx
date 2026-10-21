@@ -213,6 +213,14 @@ export const PredictionResult: React.FC<PredictionResultProps> = ({
                   </span>
 
                   {/* Interactive Hotspot Pins overlay over Leaf Image */}
+                  {/* Subtle Sci-Fi Tracking Grid & Laser Radar Sweep */}
+                  {activeView === 'annotated' && (
+                    <>
+                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-black/25 pointer-events-none" />
+                      <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-ochre/80 to-transparent animate-pulse pointer-events-none shadow-[0_0_12px_#d97706]" style={{ animationDuration: '2.5s' }} />
+                    </>
+                  )}
+
                   {activeView === 'annotated' && hsv?.hotspots && hsv.hotspots.map((pin, idx) => {
                     const isSelected = selectedPinId === pin.id;
                     const isHovered = hoveredPinId === pin.id;
@@ -245,44 +253,70 @@ export const PredictionResult: React.FC<PredictionResultProps> = ({
                         {/* Radar Pulse Effect */}
                         <span
                           style={{ borderColor: pin.color }}
-                          className={`absolute -inset-2.5 rounded-full border-2 animate-ping opacity-75 pointer-events-none ${
-                            isActive ? 'scale-125' : ''
+                          className={`absolute -inset-3 rounded-full border-2 animate-ping opacity-85 pointer-events-none ${
+                            isActive ? 'scale-150 duration-700' : 'duration-1000'
                           }`}
                         />
+                        <span
+                          style={{ backgroundColor: pin.color }}
+                          className="absolute -inset-1 rounded-full opacity-35 animate-pulse pointer-events-none"
+                        />
 
-                        {/* Pin Center Marker */}
+                        {/* Pin Center Marker with Crosshairs */}
                         <div
                           style={{ backgroundColor: pin.color }}
-                          className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-lg transition-transform duration-200 border-2 border-white ${
-                            isActive ? 'scale-125 ring-2 ring-primary ring-offset-1' : 'hover:scale-110'
+                          className={`relative w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black text-white shadow-xl transition-all duration-300 border-2 border-white ${
+                            isActive 
+                              ? 'scale-125 ring-4 ring-ochre/80 ring-offset-2 ring-offset-black/20 shadow-[0_0_20px_rgba(234,179,8,0.8)]' 
+                              : 'hover:scale-115 hover:shadow-lg'
                           }`}
                         >
-                          {idx + 1}
+                          <span>{idx + 1}</span>
+                          
+                          {/* Mini pulse ring */}
+                          <div className="absolute -inset-1 rounded-full border border-white/60 pointer-events-none" />
+                        </div>
+
+                        {/* Pin Label Tag Floating */}
+                        <div className={`absolute top-full left-1/2 -translate-x-1/2 mt-1 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-xs text-[9px] font-bold text-cream whitespace-nowrap pointer-events-none transition-opacity shadow-xs ${
+                          isActive ? 'opacity-100' : 'opacity-0 sm:group-hover:opacity-100'
+                        }`}>
+                          #{idx + 1} {label.split(' ')[0]}
                         </div>
 
                         {/* Interactive Tooltip Card */}
                         <div
-                          className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 sm:w-56 p-2.5 rounded-xl bg-charcoal/95 backdrop-blur-md text-white shadow-xl transition-all duration-200 text-left z-30 pointer-events-none ${
+                          className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 sm:w-60 p-3 rounded-xl bg-charcoal/95 backdrop-blur-md text-white shadow-2xl transition-all duration-200 text-left z-30 pointer-events-none border border-white/15 ${
                             isActive ? 'opacity-100 visible scale-100 -translate-y-1' : 'opacity-0 invisible scale-95'
                           }`}
                         >
-                          <div className="flex items-center justify-between pb-1 mb-1 border-b border-white/20">
-                            <div className="flex items-center space-x-1.5 font-bold text-xs">
-                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: pin.color }} />
+                          <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-white/20">
+                            <div className="flex items-center space-x-1.5 font-bold text-xs text-white">
+                              <span className="w-2.5 h-2.5 rounded-full ring-1 ring-white" style={{ backgroundColor: pin.color }} />
                               <span className="truncate">#{idx + 1} {label}</span>
                             </div>
-                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/20 font-medium">
+                            <span className={`text-[9px] px-2 py-0.5 rounded font-bold ${
+                              pin.severity === 'High' 
+                                ? 'bg-danger text-white' 
+                                : pin.severity === 'Moderate' 
+                                ? 'bg-ochre text-charcoal' 
+                                : 'bg-secondary text-white'
+                            }`}>
                               {pin.severity}
                             </span>
                           </div>
-                          <p className="text-[10px] text-cream/90 leading-tight">
+                          <p className="text-[11px] text-cream/90 leading-relaxed font-normal">
                             {desc}
                           </p>
                           {pin.pigment && (
-                            <div className="mt-1 text-[9px] text-ochre font-medium">
-                              Pigment: {pin.pigment}
+                            <div className="mt-1.5 pt-1 border-t border-white/10 flex items-center justify-between text-[10px] text-ochre font-semibold">
+                              <span>Pigment Signature:</span>
+                              <span className="text-white/90">{pin.pigment}</span>
                             </div>
                           )}
+                          <div className="mt-1 text-[9px] text-white/50 text-right">
+                            Tracking: ({pin.x.toFixed(0)}%, {pin.y.toFixed(0)}%)
+                          </div>
                         </div>
                       </div>
                     );

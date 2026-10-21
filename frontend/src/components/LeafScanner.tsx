@@ -507,62 +507,44 @@ export const LeafScanner: React.FC<LeafScannerProps> = ({
 
         {/* Upload Buttons & Drop Area */}
         {!isCameraActive && !previewUrl && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
             
             {/* Option 1: Live Web Camera Button */}
             <button
               type="button"
               disabled={isStartingCamera}
               onClick={() => startCamera()}
-              className="p-5 rounded-natural border-2 border-primary/40 hover:border-primary bg-primary/5 hover:bg-primary/10 text-center flex flex-col items-center justify-center transition-all cursor-pointer group shadow-subtle disabled:opacity-50"
+              className="p-6 rounded-natural border-2 border-primary/40 hover:border-primary bg-primary/5 hover:bg-primary/10 text-center flex flex-col items-center justify-center transition-all cursor-pointer group shadow-subtle disabled:opacity-50"
               id="turn-on-camera-btn"
             >
-              <div className="w-12 h-12 rounded-2xl bg-primary text-cream flex items-center justify-center mb-2.5 group-hover:scale-105 transition-transform shadow-subtle">
+              <div className="w-14 h-14 rounded-2xl bg-primary text-cream flex items-center justify-center mb-3 group-hover:scale-105 transition-transform shadow-subtle">
                 {isStartingCamera ? (
-                  <Loader2 className="w-6 h-6 text-cream animate-spin" />
+                  <Loader2 className="w-7 h-7 text-cream animate-spin" />
                 ) : (
-                  <Camera className="w-6 h-6 text-cream" />
+                  <Camera className="w-7 h-7 text-cream" />
                 )}
               </div>
-              <h3 className="text-sm font-bold text-primary">
+              <h3 className="text-base font-bold text-primary">
                 {isStartingCamera ? 'Connecting Camera...' : '📷 Turn ON Live Camera'}
               </h3>
-              <p className="text-[11px] text-muted mt-1 leading-snug">
-                Continuous real-time view in browser
+              <p className="text-xs text-muted mt-1 leading-snug max-w-xs">
+                Real-time camera view with alignment reticle & instant photo capture
               </p>
             </button>
 
-            {/* Option 2: Native Device Camera Button */}
-            <button
-              type="button"
-              onClick={() => nativeCameraInputRef.current?.click()}
-              className="p-5 rounded-natural border-2 border-emerald-600/40 hover:border-emerald-600 bg-emerald-50/60 hover:bg-emerald-50 text-center flex flex-col items-center justify-center transition-all cursor-pointer group shadow-subtle"
-              id="open-device-camera-btn"
-            >
-              <div className="w-12 h-12 rounded-2xl bg-emerald-700 text-cream flex items-center justify-center mb-2.5 group-hover:scale-105 transition-transform shadow-subtle">
-                <Smartphone className="w-6 h-6 text-cream" />
-              </div>
-              <h3 className="text-sm font-bold text-emerald-900">
-                📱 Device Camera Photo
-              </h3>
-              <p className="text-[11px] text-muted mt-1 leading-snug">
-                Opens phone or system camera app directly
-              </p>
-            </button>
-
-            {/* Option 3: Upload File / Gallery */}
+            {/* Option 2: Upload File / Gallery */}
             <div 
               onClick={() => fileInputRef.current?.click()}
-              className="p-5 rounded-natural border-2 border-dashed border-warmborder-dark/60 hover:border-secondary-dark bg-ivory/50 hover:bg-ivory text-center flex flex-col items-center justify-center transition-all cursor-pointer group shadow-subtle"
+              className="p-6 rounded-natural border-2 border-dashed border-warmborder-dark/60 hover:border-secondary-dark bg-ivory/50 hover:bg-ivory text-center flex flex-col items-center justify-center transition-all cursor-pointer group shadow-subtle"
             >
-              <div className="w-12 h-12 rounded-2xl bg-secondary/20 text-secondary-dark flex items-center justify-center mb-2.5 group-hover:scale-105 transition-transform">
-                <Upload className="w-6 h-6 text-secondary-dark" />
+              <div className="w-14 h-14 rounded-2xl bg-secondary/20 text-secondary-dark flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                <Upload className="w-7 h-7 text-secondary-dark" />
               </div>
-              <h3 className="text-sm font-bold text-charcoal">
+              <h3 className="text-base font-bold text-charcoal">
                 📂 Upload Leaf Image
               </h3>
-              <p className="text-[11px] text-muted mt-1 leading-snug">
-                Select JPG, PNG, or WebP photo from device
+              <p className="text-xs text-muted mt-1 leading-snug max-w-xs">
+                Select JPG, PNG, or WebP photo from device gallery or files
               </p>
             </div>
 
