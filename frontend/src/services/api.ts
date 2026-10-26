@@ -1,6 +1,6 @@
 import type { PredictionResponse, ActionPlanResponse, SavedScan, WeatherData, FollowUpAnswers } from '../types';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://avani-1.onrender.com/api';
 
 // In-memory caches to prevent redundant network fetches and accelerate mobile/laptop experience
 const ttsAudioCache = new Map<string, Blob>();
